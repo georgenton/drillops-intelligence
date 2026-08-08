@@ -44,10 +44,11 @@ export async function POST(request: Request) {
   const tenantDatabaseId = await resolveTenantDatabaseId(access.tenantId);
   if (!tenantDatabaseId) return NextResponse.json({ error: "Empresa no configurada en la base" }, { status: 409 });
 
-  if (envelope.data.kind === "rig" || envelope.data.kind === "drillhole") {
+  if (envelope.data.kind === "rig" || envelope.data.kind === "drillhole" || envelope.data.kind === "crown") {
     const existing = await db.select({ payload: manualRecords.payload }).from(manualRecords).where(and(eq(manualRecords.tenantId, tenantDatabaseId), eq(manualRecords.kind, envelope.data.kind)));
-    const code = (parsed.data as { code: string }).code.toLowerCase();
-    if (existing.some((row) => String((row.payload as { code?: string }).code ?? "").toLowerCase() === code)) return NextResponse.json({ error: "Ya existe un registro manual con ese código" }, { status: 409 });
+    const uniqueField = envelope.data.kind === "crown" ? "product" : "code";
+    const uniqueValue = String((parsed.data as Record<string, unknown>)[uniqueField]).toLowerCase();
+    if (existing.some((row) => String((row.payload as Record<string, unknown>)[uniqueField] ?? "").toLowerCase() === uniqueValue)) return NextResponse.json({ error: `Ya existe un registro manual con ese ${uniqueField === "code" ? "código" : "producto"}` }, { status: 409 });
   }
 
   const [created] = await db.insert(manualRecords).values({ tenantId: tenantDatabaseId, kind: envelope.data.kind, payload: parsed.data, createdByEmail: access.session.email }).returning();

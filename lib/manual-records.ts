@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const manualRecordKinds = ["rig", "drillhole", "shift", "interval"] as const;
+export const manualRecordKinds = ["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "consumable"] as const;
 export type ManualRecordKind = (typeof manualRecordKinds)[number];
 
 const requiredText = (label: string) => z.string().trim().min(1, `${label} es obligatorio`).max(160);
@@ -78,6 +78,43 @@ export const intervalRecordSchema = z.object({
   if (value.endDepth <= value.startDepth) context.addIssue({ code: z.ZodIssueCode.custom, path: ["endDepth"], message: "La profundidad final debe superar la inicial" });
 });
 
+export const crownRecordSchema = z.object({
+  manufacturer: requiredText("Fabricante"),
+  product: requiredText("Producto"),
+  matrix: requiredText("Matriz").max(40),
+  diameter: z.enum(["PQ", "HQ", "NQ"]),
+  price: finiteNumber("Precio").min(0).max(10_000_000),
+  stock: z.coerce.number().int().min(0).max(1_000_000),
+  reserved: z.coerce.number().int().min(0).max(1_000_000),
+  reorder: z.coerce.number().int().min(0).max(1_000_000),
+  historicalRop: finiteNumber("ROP histórico").min(0).max(10_000),
+  historicalCost: finiteNumber("Costo histórico").min(0).max(10_000_000),
+  historicalLife: finiteNumber("Vida histórica").min(0).max(1_000_000),
+  observations: z.coerce.number().int().min(0).max(1_000_000),
+  hardnessFit: z.array(z.coerce.number().int().min(1).max(5)).min(1),
+  fracturingFit: z.array(z.enum(["low", "medium", "high"])).min(1),
+}).superRefine((value, context) => {
+  if (value.reserved > value.stock) context.addIssue({ code: z.ZodIssueCode.custom, path: ["reserved"], message: "La reserva no puede superar el stock" });
+});
+
+export const inventoryMovementRecordSchema = z.object({
+  crownId: requiredText("Corona"),
+  type: z.enum(["entrada", "salida", "reserva", "liberacion"]),
+  quantity: z.coerce.number().int().positive().max(1_000_000),
+  date: isoDate,
+  note: z.string().trim().max(500),
+});
+
+export const consumableRecordSchema = z.object({
+  date: isoDate,
+  type: requiredText("Tipo"),
+  quantity: finiteNumber("Cantidad").positive().max(1_000_000_000),
+  unit: requiredText("Unidad").max(20),
+  cost: finiteNumber("Costo").min(0).max(1_000_000_000),
+  drillhole: requiredText("Sondeo"),
+  rig: requiredText("Taladro"),
+});
+
 export const manualRecordEnvelopeSchema = z.object({
   tenantId,
   kind: z.enum(manualRecordKinds),
@@ -89,6 +126,9 @@ export const manualRecordSchemas = {
   drillhole: drillholeRecordSchema,
   shift: shiftRecordSchema,
   interval: intervalRecordSchema,
+  crown: crownRecordSchema,
+  inventory_movement: inventoryMovementRecordSchema,
+  consumable: consumableRecordSchema,
 } as const;
 
 export function validateManualRecord(kind: ManualRecordKind, payload: unknown) {

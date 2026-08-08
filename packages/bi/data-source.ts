@@ -26,6 +26,16 @@ function mergeManual<T extends { id: string }>(seed: T[], rows: Array<{ id: stri
   return [...seed.filter((row) => !ids.has(row.id)), ...manual];
 }
 
+function applyInventoryMovements(catalog: Crown[], rows: Array<{ payload: unknown }>): Crown[] {
+  return catalog.map((crown) => {
+    const movements = rows.map((row) => row.payload as { crownId?: string; type?: string; quantity?: number }).filter((movement) => movement.crownId === crown.id);
+    const total = (type: string) => movements.filter((movement) => movement.type === type).reduce((sum, movement) => sum + Number(movement.quantity ?? 0), 0);
+    const stock = Math.max(0, crown.stock + total("entrada") - total("salida"));
+    const reserved = Math.max(0, Math.min(stock, crown.reserved + total("reserva") - total("liberacion")));
+    return { ...crown, stock, reserved };
+  });
+}
+
 export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
   const demo = getDemoBiDataset(tenantId);
   if (!db) return demo;
@@ -37,6 +47,7 @@ export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
       const rows = await db.select({ id: manualRecords.id, kind: manualRecords.kind, payload: manualRecords.payload }).from(manualRecords).where(eq(manualRecords.tenantId, tenantScope));
       if (!rows.length) return demo;
       const ofKind = (kind: string) => rows.filter((row) => row.kind === kind);
+      const catalog = mergeManual<Crown>(demo.crowns, ofKind("crown"));
       return {
         ...demo,
         source: "database",
@@ -44,6 +55,7 @@ export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
         drillholes: mergeManual<Drillhole>(demo.drillholes, ofKind("drillhole")),
         shifts: mergeManual<Shift>(demo.shifts, ofKind("shift")),
         intervals: mergeManual<Interval>(demo.intervals, ofKind("interval")),
+        crowns: applyInventoryMovements(catalog, ofKind("inventory_movement")),
       };
     }
     const [holeRows, rigRows, shiftRows, intervalRows, productRows, runRows, inventoryRows, surveyRows] = await Promise.all([

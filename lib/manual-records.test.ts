@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drillholeRecordSchema, intervalRecordSchema, shiftRecordSchema } from "./manual-records";
+import { consumableRecordSchema, crownRecordSchema, drillholeRecordSchema, intervalRecordSchema, inventoryMovementRecordSchema, shiftRecordSchema } from "./manual-records";
 
 describe("validación de registros manuales", () => {
   it("rechaza un sondeo cuya profundidad actual supera el objetivo", () => {
@@ -15,5 +15,15 @@ describe("validación de registros manuales", () => {
   it("acepta un intervalo operacional válido", () => {
     const result = intervalRecordSchema.safeParse({ drillholeId:"hole-1", shiftId:"shift-1", rigId:"rig-1", startDepth:100, endDepth:103, minutes:48, bitCode:"GT-X7", waterReturn:"complete", recovery:96, hardness:4, fracturing:"medium", abrasivity:"medium", vibration:"low", stability:"stable", comment:"Registro manual", source:"manual" });
     expect(result.success).toBe(true);
+  });
+
+  it("rechaza una reserva inicial mayor que el stock de corona", () => {
+    const result = crownRecordSchema.safeParse({ manufacturer:"GoldTech", product:"QA", matrix:"X9", diameter:"HQ", price:100, stock:2, reserved:3, reorder:1, historicalRop:3.2, historicalCost:20, historicalLife:150, observations:0, hardnessFit:[3,4,5], fracturingFit:["medium","high"] });
+    expect(result.success).toBe(false);
+  });
+
+  it("valida movimientos positivos y consumos completos", () => {
+    expect(inventoryMovementRecordSchema.safeParse({ crownId:"crown-1", type:"entrada", quantity:3, date:"2026-08-08", note:"Ingreso" }).success).toBe(true);
+    expect(consumableRecordSchema.safeParse({ date:"2026-08-08", type:"Agua", quantity:1200, unit:"L", cost:42, drillhole:"SEC-42D", rig:"MP-07" }).success).toBe(true);
   });
 });
