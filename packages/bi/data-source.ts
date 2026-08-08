@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import { getDemoBiDataset } from "@/lib/bi-data";
-import { tenants as demoTenants } from "@/lib/demo-data";
 import { db } from "@/packages/db/client";
 import {
   bitProducts,
@@ -8,28 +7,45 @@ import {
   drillholes as dbDrillholes,
   intervals as dbIntervals,
   inventory,
+  manualRecords,
   projects,
   rigs as dbRigs,
   shifts as dbShifts,
   surveys as dbSurveys,
-  tenants as dbTenants,
 } from "@/packages/db/schema";
+import { resolveTenantDatabaseId } from "@/packages/db/tenant";
 import { calculateRop, safeDivide } from "@/packages/domain/calculations";
 import type { BiDataset } from "./types";
-import type { Crown, Diameter, Level, TenantId } from "@/packages/domain/types";
+import type { Crown, Diameter, Drillhole, Interval, Level, Rig, Shift, TenantId } from "@/packages/domain/types";
 
 const number = (value: string | number | null | undefined) => Number(value ?? 0);
 
+function mergeManual<T extends { id: string }>(seed: T[], rows: Array<{ id: string; payload: unknown }>): T[] {
+  const manual = rows.map((row) => ({ ...(row.payload as object), id: row.id }) as T);
+  const ids = new Set(manual.map((row) => row.id));
+  return [...seed.filter((row) => !ids.has(row.id)), ...manual];
+}
+
 export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
   const demo = getDemoBiDataset(tenantId);
-  if (process.env.DEMO_MODE !== "false" || !db) return demo;
-  const tenantSlug = demoTenants.find((tenant) => tenant.id === tenantId)?.slug;
-  if (!tenantSlug) return demo;
+  if (!db) return demo;
 
   try {
-    const [tenant] = await db.select({ id: dbTenants.id }).from(dbTenants).where(eq(dbTenants.slug, tenantSlug)).limit(1);
-    if (!tenant) return demo;
-    const tenantScope = tenant.id;
+    const tenantScope = await resolveTenantDatabaseId(tenantId);
+    if (!tenantScope) return demo;
+    if (process.env.DEMO_MODE !== "false") {
+      const rows = await db.select({ id: manualRecords.id, kind: manualRecords.kind, payload: manualRecords.payload }).from(manualRecords).where(eq(manualRecords.tenantId, tenantScope));
+      if (!rows.length) return demo;
+      const ofKind = (kind: string) => rows.filter((row) => row.kind === kind);
+      return {
+        ...demo,
+        source: "database",
+        rigs: mergeManual<Rig>(demo.rigs, ofKind("rig")),
+        drillholes: mergeManual<Drillhole>(demo.drillholes, ofKind("drillhole")),
+        shifts: mergeManual<Shift>(demo.shifts, ofKind("shift")),
+        intervals: mergeManual<Interval>(demo.intervals, ofKind("interval")),
+      };
+    }
     const [holeRows, rigRows, shiftRows, intervalRows, productRows, runRows, inventoryRows, surveyRows] = await Promise.all([
       db.select({
         id: dbDrillholes.id,
