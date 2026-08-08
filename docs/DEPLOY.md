@@ -1,5 +1,14 @@
 # Despliegue
 
+## Staging actual
+
+- GitHub: `georgenton/drillops-intelligence`
+- Rama de despliegue en Vercel: `staging`
+- URL pública: `https://drillops-intelligence-web.vercel.app`
+- Railway: proyecto `drillops-intelligence`, entorno `staging`, servicio `Postgres`
+
+La aplicación es actualmente un monolito Next.js: Vercel ejecuta tanto la interfaz como los Route Handlers de `/api/v1`; Railway aloja PostgreSQL y su volumen persistente. No se versionan archivos `.env`, `.vercel` ni `.railway`.
+
 ## Railway PostgreSQL
 
 1. Crea un proyecto y agrega PostgreSQL.
@@ -9,7 +18,7 @@
 
 ## Vercel
 
-Importa el repositorio, usa pnpm y define: `DATABASE_URL`, `AUTH_SECRET`, `DEMO_MODE`, `NEXT_PUBLIC_APP_URL`. Opcionales: `OPENAI_API_KEY` y `OPENAI_MODEL=gpt-5.6-terra`.
+Importa el repositorio, usa pnpm y define: `DATABASE_URL`, `AUTH_SECRET`, `DEMO_MODE`, `NEXT_PUBLIC_APP_URL`. Opcionales: `OPENAI_API_KEY` y `OPENAI_MODEL=gpt-5.6`.
 
 Build: `pnpm build`. El API interno funciona como Route Handlers. Un worker futuro puede desplegarse en Railway consumiendo la misma base y módulos de dominio sin cambiar el frontend.
 
