@@ -65,7 +65,7 @@ type InventoryMovement={id:string;tenantId:TenantId;crownId:string;type:"entrada
 type SupplyStockRecord={id:string;tenantId:TenantId;item:string;quantity:number;unit:string;minimum:number;date:string};
 type ConsumableRecord={id:string;tenantId:TenantId;date:string;type:string;quantity:number;unit:string;cost:number;drillhole:string;rig:string};
 
-export function AppShell({ section, session }: {section:string;session:DemoSession}) {
+export function AppShell({ section, session, billingEnabled = false }: {section:string;session:DemoSession;billingEnabled?:boolean}) {
   const router=useRouter();
   const [tenantId,setTenantId]=useState<TenantId>(session.tenantId);
   const [mobile,setMobile]=useState(false);
@@ -80,7 +80,7 @@ export function AppShell({ section, session }: {section:string;session:DemoSessi
       <div className="side-brand"><span className="brand-mark"><Gauge size={20}/></span><span>DRILLOPS <b>INTELLIGENCE</b></span><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div>
       <div className="tenant-chip"><div className="tenant-avatar" style={{background:tenant.color}}>{tenant.name.slice(0,2).toUpperCase()}</div><div><b>{tenant.name}</b><small>{tenant.plan} · {tenant.status==="trial"?"Trial":"Activo"}</small></div>{canSwitch&&<ChevronDown/>}</div>
       {canSwitch&&<select className="tenant-select" aria-label="Cambiar empresa" value={tenantId} onChange={e=>{setTenantId(e.target.value as TenantId);setSelectedHole(drillholes.find(h=>h.tenantId===e.target.value)?.id??"")}}>{tenants.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>}
-      <nav>{menu.map(([href,label,Icon])=><Link key={href} className={section===href?"active":""} href={`/${href}`} onClick={()=>setMobile(false)}><Icon size={17}/><span>{label}</span>{href==="bit-advisor"&&<i>AI</i>}</Link>)}</nav>
+      <nav>{menu.filter(([href])=>billingEnabled||href!=="facturacion").map(([href,label,Icon])=><Link key={href} className={section===href?"active":""} href={`/${href}`} onClick={()=>setMobile(false)}><Icon size={17}/><span>{label}</span>{href==="bit-advisor"&&<i>AI</i>}</Link>)}</nav>
       {canSwitch&&<div className="platform-nav"><small>PLATAFORMA</small><Link className={section==="tenants"?"active":""} href="/tenants"><Building2 size={17}/>Empresas</Link></div>}
       <div className="side-user"><div className="user-avatar">{session.name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><b>{session.name}</b><small>{session.role.replaceAll("_"," ")}</small></div><button onClick={logout} title="Cerrar sesión"><LogOut size={17}/></button></div>
     </aside>
@@ -104,7 +104,7 @@ export function AppShell({ section, session }: {section:string;session:DemoSessi
         {section==="importaciones"&&<Imports/>}
         {section==="drill-assistant"&&<Assistant tenantId={tenantId}/>} 
         {section==="reportes"&&<><Report tenantId={tenantId}/><ReportAttachment tenantId={tenantId}/></>}
-        {section==="facturacion"&&<Billing tenantId={tenantId}/>} 
+        {section==="facturacion"&&billingEnabled&&<Billing tenantId={tenantId}/>}
         {section==="configuracion"&&<SettingsScreen/>}
         {section==="tenants"&&<Tenants/>}
       </div>
