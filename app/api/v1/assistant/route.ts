@@ -7,6 +7,8 @@ import { verifySession } from "@/lib/auth";
 import { assertTenantAccess } from "@/lib/tenant-guard";
 import { buildOperationalSnapshot } from "@/packages/bi/analytics";
 import { loadBiDataset } from "@/packages/bi/data-source";
+import { raulMarchConsumableItems, raulMonthlyConsumableCosts } from "@/lib/raul-data";
+import { calculateMseMpa, calculateRop } from "@/packages/domain/calculations";
 import {
   chartTypeFromTool,
   executeBiQuery,
@@ -32,7 +34,7 @@ const queryTool = {
     properties: {
       metric: {
         type: "string",
-        enum: ["metres", "rop", "utilization", "npt", "depth", "recovery", "pressure", "torque", "rpm", "crowns", "eta", "summary"],
+        enum: ["metres", "planned", "rop", "utilization", "npt", "depth", "recovery", "pressure", "torque", "rpm", "mse", "consumables", "crowns", "eta", "summary"],
         description: "Indicador que responde mejor la pregunta.",
       },
       chartType: {
@@ -107,7 +109,14 @@ export async function POST(request: Request) {
     cost: crown.historicalCost,
     available: Math.max(0, crown.stock - crown.reserved),
   }));
-  const queryContext = { crowns, intervals: dataset.intervals };
+  const activeHole = snapshot.hole;
+  const diameterMm = activeHole?.diameter === "PQ" ? 122.6 : activeHole?.diameter === "NQ" ? 75.7 : 96;
+  const queryContext = {
+    crowns,
+    intervals: dataset.intervals.map((interval) => ({ ...interval, mse: calculateMseMpa({ wobKn: interval.wobKn, torqueNm: interval.torque, rpm: interval.rpm, ropMetresPerHour: calculateRop(interval.endDepth - interval.startDepth, interval.minutes / 60), holeDiameterMm: diameterMm }) })),
+    monthlyConsumables: raulMonthlyConsumableCosts,
+    consumableItems: raulMarchConsumableItems,
+  };
   const history = parsed.data.history ?? [];
   const deterministicQuery = resolveDeterministicQuery(parsed.data.question, history);
   const deterministic = executeBiQuery(snapshot, deterministicQuery, queryContext);

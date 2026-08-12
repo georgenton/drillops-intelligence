@@ -7,18 +7,18 @@ export const tenants: Tenant[] = [
 ];
 
 export const rigs: Rig[] = [
-  { id:"mp-07", tenantId:"extract", code:"MP-07", manufacturer:"Multipower", model:"Discovery II", serial:"MP-D2-0719", site:"Secoya Norte", hourlyCost:148, active:true, source:"manual_analog", capabilities:["pressure","torque","rpm","depth"] },
+  { id:"mp-07", tenantId:"extract", code:"MP-07", manufacturer:"Multipower", model:"Discovery II", serial:"MP-D2-0719", site:"Secoya Norte", hourlyCost:148, active:true, source:"manual_analog", capabilities:["pressure","torque","rpm","water","wob","survey","depth"] },
   { id:"hc-03", tenantId:"extract", code:"HC-03", manufacturer:"Hydracore", model:"2000", serial:"HC2K-0308", site:"Secoya Norte", hourlyCost:132, active:true, source:"manual_analog", capabilities:["pressure","rpm","depth"] },
   { id:"mp-a1", tenantId:"minera-a", code:"MP-A1", manufacturer:"Multipower", model:"Discovery II", serial:"MP-A-119", site:"Proyecto Cóndor", hourlyCost:141, active:true, source:"manual_analog", capabilities:["pressure","torque","depth"] },
   { id:"hc-b1", tenantId:"minera-b", code:"HC-B1", manufacturer:"Hydracore", model:"4000", serial:"HC-B-405", site:"Campaña Sur", hourlyCost:162, active:true, source:"digital", capabilities:["pressure","torque","rpm","water","depth"] },
 ];
 
 export const drillholes: Drillhole[] = [
-  { id:"sec-42d", tenantId:"extract", code:"SEC-42D", project:"Campaña Secoya 2026", rigId:"mp-07", targetDepth:600, currentDepth:426, diameter:"HQ", status:"drilling", startDate:"2026-07-21", eta:"2026-08-13" },
-  { id:"sec-41d", tenantId:"extract", code:"SEC-41D", project:"Campaña Secoya 2026", rigId:"hc-03", targetDepth:480, currentDepth:480, diameter:"NQ", status:"completed", startDate:"2026-06-17", eta:"2026-07-12" },
-  { id:"ama-08", tenantId:"extract", code:"AMA-08", project:"Amazonas Deep", rigId:"mp-07", targetDepth:750, currentDepth:138, diameter:"PQ", status:"planned", startDate:"2026-08-18", eta:"2026-09-25" },
-  { id:"con-12", tenantId:"minera-a", code:"CON-12", project:"Proyecto Cóndor", rigId:"mp-a1", targetDepth:520, currentDepth:294, diameter:"HQ", status:"drilling", startDate:"2026-07-28", eta:"2026-08-22" },
-  { id:"sur-05", tenantId:"minera-b", code:"SUR-05", project:"Campaña Sur", rigId:"hc-b1", targetDepth:680, currentDepth:351, diameter:"NQ", status:"drilling", startDate:"2026-07-14", eta:"2026-08-29" },
+  { id:"sec-42d", tenantId:"extract", code:"SEC-42D", project:"Campaña Secoya 2026", rigId:"mp-07", targetDepth:600, currentDepth:426, plannedDailyMetres:72, diameter:"HQ", status:"drilling", startDate:"2026-07-21", eta:"2026-08-13" },
+  { id:"sec-41d", tenantId:"extract", code:"SEC-41D", project:"Campaña Secoya 2026", rigId:"hc-03", targetDepth:480, currentDepth:480, plannedDailyMetres:60, diameter:"NQ", status:"completed", startDate:"2026-06-17", eta:"2026-07-12" },
+  { id:"ama-08", tenantId:"extract", code:"AMA-08", project:"Amazonas Deep", rigId:"mp-07", targetDepth:750, currentDepth:138, plannedDailyMetres:54, diameter:"PQ", status:"planned", startDate:"2026-08-18", eta:"2026-09-25" },
+  { id:"con-12", tenantId:"minera-a", code:"CON-12", project:"Proyecto Cóndor", rigId:"mp-a1", targetDepth:520, currentDepth:294, plannedDailyMetres:60, diameter:"HQ", status:"drilling", startDate:"2026-07-28", eta:"2026-08-22" },
+  { id:"sur-05", tenantId:"minera-b", code:"SUR-05", project:"Campaña Sur", rigId:"hc-b1", targetDepth:680, currentDepth:351, plannedDailyMetres:58, diameter:"NQ", status:"drilling", startDate:"2026-07-14", eta:"2026-08-29" },
 ];
 
 const nptSets: Record<string,number>[] = [
@@ -31,7 +31,7 @@ const nptSets: Record<string,number>[] = [
 export const shifts: Shift[] = Array.from({ length: 14 }, (_, i) => {
   const metres = [33,36,30,39,34.5,27,24,36,39,37.5,42,40.5,36,43.5][i];
   const end = 426 - (13 - i) * 36;
-  return { id:`sh-${i+1}`, tenantId:"extract", drillholeId:"sec-42d", rigId:"mp-07", date:`2026-08-${String(1 + Math.floor(i/2)).padStart(2,"0")}`, type:i%2?"Noche":"Día", crew:i%2?"Bravo":"Águila", depthStart:end-metres, depthEnd:end, effectiveHours:[8.4,9.1,7.8,9.4,8.7,6.8,6.1,8.9,9.2,9.0,9.7,9.4,8.8,9.8][i], totalHours:12, npt:nptSets[i%4] };
+  return { id:`sh-${i+1}`, tenantId:"extract", drillholeId:"sec-42d", rigId:"mp-07", date:`2026-08-${String(1 + Math.floor(i/2)).padStart(2,"0")}`, type:i%2?"Noche":"Día", crew:i%2?"Bravo":"Águila", supervisor:i%2?"Carlos Mena":"Luis Paredes", driller:i%2?"Jorge Ponce":"Miguel Vera", depthStart:end-metres, depthEnd:end, effectiveHours:[8.4,9.1,7.8,9.4,8.7,6.8,6.1,8.9,9.2,9.0,9.7,9.4,8.8,9.8][i], totalHours:12, npt:nptSets[i%4] };
 });
 
 const bits = ["GT-X7", "DIAB-M8", "GT-X7", "TORQ-A9"];
@@ -42,7 +42,7 @@ export const intervals: Interval[] = Array.from({ length: 96 }, (_, i) => {
   const minutes = anomaly ? 76 + (i%3)*5 : 39 + ((i*7)%18);
   const hardness = i < 24 ? 2 : i < 52 ? 3 : i < 79 ? 4 : 5;
   return {
-    id:`int-${i+1}`, tenantId:"extract", drillholeId:"sec-42d", shiftId:`sh-${Math.min(14, Math.floor(i/7)+1)}`, rigId:"mp-07", startDepth, endDepth:startDepth+3, minutes, bitCode:bits[Math.floor(i/24)%bits.length], pressure:22 + hardness*8 + ((i*3)%7), torque:310 + hardness*74 + ((i*17)%60), rpm:880 - hardness*65 + ((i*11)%50), waterFlow:32 - hardness*2 + (i%4), waterReturn:i%17===0?"lost":i%7===0?"partial":"complete", recovery:Math.max(72, 98 - (i%9)*2 - (anomaly?8:0)), hardness, fracturing:i%11<2?"high":i%5<2?"medium":"low", abrasivity:hardness>=4?"high":hardness===3?"medium":"low", vibration:anomaly?"high":i%6===0?"medium":"low", stability:anomaly||i%13===0?"unstable":"stable", comment:comments[i%comments.length], source:i<8?"imported":"manual"
+    id:`int-${i+1}`, tenantId:"extract", drillholeId:"sec-42d", shiftId:`sh-${Math.min(14, Math.floor(i/7)+1)}`, rigId:"mp-07", startDepth, endDepth:startDepth+3, minutes, bitCode:bits[Math.floor(i/24)%bits.length], pressure:22 + hardness*8 + ((i*3)%7), torque:310 + hardness*74 + ((i*17)%60), rpm:880 - hardness*65 + ((i*11)%50), waterFlow:32 - hardness*2 + (i%4), wobKn:18+hardness*4+(i%3), surveyInclination:-62-(startDepth/30*.72), lithology:hardness>=5?"Cuarcita":hardness>=4?"Andesita":hardness===3?"Diorita":"Toba", mohs:hardness>=5?7:hardness>=4?6:hardness===3?5:3.5, waterReturn:i%17===0?"lost":i%7===0?"partial":"complete", recovery:Math.max(72, 98 - (i%9)*2 - (anomaly?8:0)), hardness, fracturing:i%11<2?"high":i%5<2?"medium":"low", abrasivity:hardness>=4?"high":hardness===3?"medium":"low", vibration:anomaly?"high":i%6===0?"medium":"low", stability:anomaly||i%13===0?"unstable":"stable", comment:comments[i%comments.length], source:i<8?"imported":"manual"
   };
 });
 

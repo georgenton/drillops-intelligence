@@ -86,7 +86,7 @@ export interface OperationalSnapshot {
   hardnessRopChangePct: number;
 }
 
-export type BiMetric = "metres" | "rop" | "utilization" | "npt" | "depth" | "recovery" | "pressure" | "torque" | "rpm" | "crowns" | "eta" | "summary";
+export type BiMetric = "metres" | "planned" | "rop" | "utilization" | "npt" | "depth" | "recovery" | "pressure" | "torque" | "rpm" | "mse" | "consumables" | "crowns" | "eta" | "summary";
 export type BiChartType = "bar" | "bar3d" | "line" | "area" | "doughnut" | "scatter";
 export type BiUnitSystem = "metric" | "imperial";
 

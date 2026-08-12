@@ -10,6 +10,17 @@ export function calculateUtilization(effectiveHours: number, shiftHours = 12): n
   return safeDivide(effectiveHours, shiftHours) * 100;
 }
 
+export function calculateMseMpa(input: { wobKn?: number; torqueNm?: number; rpm?: number; ropMetresPerHour?: number; holeDiameterMm?: number; }) {
+  const diameterMetres = Math.max(0, input.holeDiameterMm ?? 0) / 1_000;
+  const area = Math.PI * diameterMetres ** 2 / 4;
+  const ropMetresPerSecond = Math.max(0, input.ropMetresPerHour ?? 0) / 3_600;
+  if (!area || !ropMetresPerSecond) return 0;
+  const axialPressurePa = Math.max(0, input.wobKn ?? 0) * 1_000 / area;
+  const rotationalPowerWatts = 2 * Math.PI * Math.max(0, input.rpm ?? 0) / 60 * Math.max(0, input.torqueNm ?? 0);
+  const volumetricRate = area * ropMetresPerSecond;
+  return (axialPressurePa + rotationalPowerWatts / volumetricRate) / 1_000_000;
+}
+
 export function calculateRunCosts(input: { entryDepth: number; exitDepth: number; purchaseCost: number; drillingHours: number; rigHourlyCost: number; consumablesCost: number; }) {
   const metres = Math.max(0, input.exitDepth - input.entryDepth);
   const rigCost = input.drillingHours * input.rigHourlyCost;

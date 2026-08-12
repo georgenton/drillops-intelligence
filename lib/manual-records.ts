@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const manualRecordKinds = ["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "consumable"] as const;
+export const manualRecordKinds = ["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "supply_stock", "consumable"] as const;
 export type ManualRecordKind = (typeof manualRecordKinds)[number];
 
 const requiredText = (label: string) => z.string().trim().min(1, `${label} es obligatorio`).max(160);
@@ -26,6 +26,7 @@ export const drillholeRecordSchema = z.object({
   rigId: requiredText("Taladro"),
   targetDepth: finiteNumber("Profundidad objetivo").positive().max(100_000),
   currentDepth: finiteNumber("Profundidad actual").min(0).max(100_000),
+  plannedDailyMetres: finiteNumber("Meta diaria").positive().max(10_000).optional(),
   diameter: z.enum(["PQ", "HQ", "NQ"]),
   status: z.enum(["drilling", "planned", "completed"]),
   startDate: isoDate,
@@ -41,6 +42,8 @@ export const shiftRecordSchema = z.object({
   date: isoDate,
   type: z.enum(["Día", "Noche"]),
   crew: requiredText("Cuadrilla"),
+  supervisor: requiredText("Supervisor").optional(),
+  driller: requiredText("Perforador").optional(),
   depthStart: finiteNumber("Profundidad inicial").min(0).max(100_000),
   depthEnd: finiteNumber("Profundidad final").min(0).max(100_000),
   effectiveHours: finiteNumber("Horas efectivas").min(0).max(24),
@@ -65,6 +68,10 @@ export const intervalRecordSchema = z.object({
   torque: finiteNumber("Torque").min(0).max(1_000_000).optional(),
   rpm: finiteNumber("RPM").min(0).max(100_000).optional(),
   waterFlow: finiteNumber("Flujo de agua").min(0).max(1_000_000).optional(),
+  wobKn: finiteNumber("WOB").min(0).max(1_000_000).optional(),
+  surveyInclination: finiteNumber("Inclinación survey").min(-180).max(180).optional(),
+  lithology: z.string().trim().max(160).optional(),
+  mohs: finiteNumber("Mohs").min(1).max(10).optional(),
   waterReturn: z.enum(["complete", "partial", "lost"]),
   recovery: finiteNumber("Recuperación").min(0).max(100),
   hardness: z.coerce.number().int().min(1).max(5),
@@ -105,6 +112,14 @@ export const inventoryMovementRecordSchema = z.object({
   note: z.string().trim().max(500),
 });
 
+export const supplyStockRecordSchema = z.object({
+  item: requiredText("Insumo"),
+  quantity: finiteNumber("Cantidad").min(0).max(1_000_000_000),
+  unit: requiredText("Unidad").max(20),
+  minimum: finiteNumber("Stock mínimo").min(0).max(1_000_000_000),
+  date: isoDate,
+});
+
 export const consumableRecordSchema = z.object({
   date: isoDate,
   type: requiredText("Tipo"),
@@ -128,6 +143,7 @@ export const manualRecordSchemas = {
   interval: intervalRecordSchema,
   crown: crownRecordSchema,
   inventory_movement: inventoryMovementRecordSchema,
+  supply_stock: supplyStockRecordSchema,
   consumable: consumableRecordSchema,
 } as const;
 
