@@ -17,6 +17,7 @@ import {
   unitSystemFromTool,
 } from "@/packages/bi/query";
 import type { BiQueryRequest } from "@/packages/bi/types";
+import { canQueryBiMetric, canUseAssistant, canViewOperationalCosts, tenantPlan } from "@/lib/access-control";
 
 const inputSchema = z.object({
   question: z.string().min(2).max(500),
@@ -100,6 +101,8 @@ export async function POST(request: Request) {
   const parsed = inputSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Consulta inválida" }, { status: 400 });
   try { assertTenantAccess(session, parsed.data.tenantId); } catch { return NextResponse.json({ error: "Acceso de tenant denegado" }, { status: 403 }); }
+  const plan = tenantPlan(parsed.data.tenantId);
+  if (!canUseAssistant(session.role, plan)) return NextResponse.json({ error: "El asistente no está incluido para tu perfil o plan" }, { status: 403 });
 
   const dataset = await loadBiDataset(parsed.data.tenantId);
   const snapshot = buildOperationalSnapshot(dataset);
@@ -116,9 +119,11 @@ export async function POST(request: Request) {
     intervals: dataset.intervals.map((interval) => ({ ...interval, mse: calculateMseMpa({ wobKn: interval.wobKn, torqueNm: interval.torque, rpm: interval.rpm, ropMetresPerHour: calculateRop(interval.endDepth - interval.startDepth, interval.minutes / 60), holeDiameterMm: diameterMm }) })),
     monthlyConsumables: raulMonthlyConsumableCosts,
     consumableItems: raulMarchConsumableItems,
+    includeCosts: canViewOperationalCosts(session.role),
   };
   const history = parsed.data.history ?? [];
   const deterministicQuery = resolveDeterministicQuery(parsed.data.question, history);
+  if (!canQueryBiMetric(session.role, plan, deterministicQuery.metric)) return NextResponse.json({ error: "Tu perfil o plan no permite consultar información financiera mediante el asistente" }, { status: 403 });
   const deterministic = executeBiQuery(snapshot, deterministicQuery, queryContext);
 
   if (!process.env.OPENAI_API_KEY) {
@@ -129,6 +134,7 @@ export async function POST(request: Request) {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const selection = await chooseQueryWithOpenAI(openai, parsed.data.question, history);
     if (!selection) return NextResponse.json({ ...deterministic, mode: "fallback", source: dataset.source, query: deterministicQuery });
+    if (!canQueryBiMetric(session.role, plan, selection.query.metric)) return NextResponse.json({ error: "Tu perfil o plan no permite consultar información financiera mediante el asistente" }, { status: 403 });
     const result = executeBiQuery(snapshot, selection.query, queryContext);
     const reasoningItems = selection.response.output.filter((item): item is ResponseReasoningItem => item.type === "reasoning");
     const finalInput: ResponseInput = [

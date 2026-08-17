@@ -1,9 +1,10 @@
 export type TenantId = "extract" | "minera-a" | "minera-b";
+export type PlanName = "Básico" | "Intermedio" | "Premium";
 export type Diameter = "PQ" | "HQ" | "NQ";
 export type Priority = "speed" | "cost" | "life" | "balanced";
 export type Level = "low" | "medium" | "high";
 
-export interface Tenant { id: TenantId; name: string; slug: string; color: string; plan: string; status: "active" | "trial"; }
+export interface Tenant { id: TenantId; name: string; slug: string; color: string; plan: PlanName; status: "active" | "trial"; }
 export interface Rig { id: string; tenantId: TenantId; code: string; manufacturer: string; model: string; serial: string; site: string; hourlyCost: number; active: boolean; source: "manual_analog" | "digital" | "sensor"; capabilities: string[]; }
 export interface Drillhole { id: string; tenantId: TenantId; code: string; project: string; rigId: string; targetDepth: number; currentDepth: number; plannedDailyMetres?: number; diameter: Diameter; status: "drilling" | "planned" | "completed"; startDate: string; eta: string; }
 export interface Shift { id: string; tenantId: TenantId; drillholeId: string; rigId: string; date: string; type: "Día" | "Noche"; crew: string; supervisor?: string; driller?: string; depthStart: number; depthEnd: number; effectiveHours: number; totalHours: number; npt: Record<string, number>; }

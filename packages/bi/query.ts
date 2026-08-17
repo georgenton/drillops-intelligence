@@ -153,6 +153,7 @@ export function executeBiQuery(snapshot: OperationalSnapshot, request: BiQueryRe
   intervals?: Array<{ startDepth: number; endDepth: number; recovery: number; pressure?: number; torque?: number; rpm?: number; mse?: number }>;
   monthlyConsumables?: Array<{ month: string; cost: number }>;
   consumableItems?: Array<{ item: string; cost: number }>;
+  includeCosts?: boolean;
 }): BiAnswer {
   const imperial = request.units === "imperial";
   const lengthUnit = imperial ? "ft" : "m";
@@ -249,7 +250,7 @@ export function executeBiQuery(snapshot: OperationalSnapshot, request: BiQueryRe
   return {
     answer: `${snapshot.hole?.code ?? "El sondeo"} está en ${format(snapshot.kpis.currentDepth, 1)} de ${format(snapshot.kpis.targetDepth, 1)} m. En los últimos ${snapshot.period.days} días avanzó ${format(snapshot.kpis.metres, 1)} m, con ROP ponderado de ${format(snapshot.kpis.rop, 2)} m/h y ${format(snapshot.kpis.utilization, 1)}% de utilización.${topNpt ? ` El NPT principal fue ${topNpt.cause.toLowerCase()} (${format(topNpt.hours, 1)} h).` : ""}`,
     chart: temporalChart(snapshot, "metres", { ...request, metric: "metres" }),
-    facts: [{ label: "Costo operativo", value: `$${format(snapshot.kpis.operationalCostPerMetre, 1)}/m` }, { label: "Alertas", value: String(snapshot.alerts.length) }],
+    facts: [...(context?.includeCosts === false ? [] : [{ label: "Costo operativo", value: `$${format(snapshot.kpis.operationalCostPerMetre, 1)}/m` }]), { label: "Alertas", value: String(snapshot.alerts.length) }],
     links: [{ label: "Abrir dashboard", href: "/dashboard" }, { label: "Abrir Depth Intelligence", href: "/depth-intelligence" }],
     tool: "summarize_drillhole",
   };

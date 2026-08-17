@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const manualRecordKinds = ["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "supply_stock", "consumable"] as const;
+export const manualRecordKinds = ["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "supply_stock", "consumable", "report_attachment"] as const;
 export type ManualRecordKind = (typeof manualRecordKinds)[number];
 
 const requiredText = (label: string) => z.string().trim().min(1, `${label} es obligatorio`).max(160);
@@ -42,8 +42,8 @@ export const shiftRecordSchema = z.object({
   date: isoDate,
   type: z.enum(["Día", "Noche"]),
   crew: requiredText("Cuadrilla"),
-  supervisor: requiredText("Supervisor").optional(),
-  driller: requiredText("Perforador").optional(),
+  supervisor: requiredText("Supervisor"),
+  driller: requiredText("Perforador"),
   depthStart: finiteNumber("Profundidad inicial").min(0).max(100_000),
   depthEnd: finiteNumber("Profundidad final").min(0).max(100_000),
   effectiveHours: finiteNumber("Horas efectivas").min(0).max(24),
@@ -128,6 +128,15 @@ export const consumableRecordSchema = z.object({
   cost: finiteNumber("Costo").min(0).max(1_000_000_000),
   drillhole: requiredText("Sondeo"),
   rig: requiredText("Taladro"),
+  metresDrilled: finiteNumber("Metros de referencia").positive().max(100_000),
+});
+
+export const reportAttachmentRecordSchema = z.object({
+  fileName: requiredText("Nombre del archivo").max(180),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  dataUrl: z.string().startsWith("data:image/").max(1_500_000, "La imagen no puede superar aproximadamente 1 MB"),
+  caption: z.string().trim().max(240),
+  capturedAt: isoDate,
 });
 
 export const manualRecordEnvelopeSchema = z.object({
@@ -145,6 +154,7 @@ export const manualRecordSchemas = {
   inventory_movement: inventoryMovementRecordSchema,
   supply_stock: supplyStockRecordSchema,
   consumable: consumableRecordSchema,
+  report_attachment: reportAttachmentRecordSchema,
 } as const;
 
 export function validateManualRecord(kind: ManualRecordKind, payload: unknown) {

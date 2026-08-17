@@ -12,8 +12,9 @@ export default function LoginPage() {
   async function login(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError("");
     const res = await fetch("/api/auth/demo",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,password})});
+    const body=await res.json().catch(()=>({})) as {landing?:string};
     if (!res.ok) { setError("Credenciales inválidas. Usa un usuario demo."); setLoading(false); return; }
-    router.push("/dashboard"); router.refresh();
+    router.push(`/${body.landing??"dashboard"}`); router.refresh();
   }
   return <main className="login-page">
     <section className="login-hero">
@@ -39,8 +40,13 @@ export default function LoginPage() {
         <button className="primary-btn login-btn" disabled={loading}>{loading?"Ingresando…":"Ingresar al demo"}<ArrowRight size={18}/></button>
         <div className="demo-users"><b>Accesos rápidos</b>
           <button type="button" onClick={()=>setEmail("platform@demo.local")}>Admin plataforma</button>
+          <button type="button" onClick={()=>setEmail("gerencia@extract.demo")}>Gerente General</button>
+          <button type="button" onClick={()=>setEmail("cliente@extract.demo")}>Cliente</button>
           <button type="button" onClick={()=>setEmail("supervisor@extract.demo")}>Supervisor</button>
-          <button type="button" onClick={()=>setEmail("operator@extract.demo")}>Operador</button>
+          <button type="button" onClick={()=>setEmail("perforador@extract.demo")}>Perforador</button>
+          <button type="button" onClick={()=>setEmail("control@extract.demo")}>Control</button>
+          <button type="button" onClick={()=>setEmail("basico@minera-a.demo")}>Plan Básico</button>
+          <button type="button" onClick={()=>setEmail("intermedio@minera-b.demo")}>Plan Intermedio</button>
         </div>
         <small>Contraseña demo: <code>DrillOps2026!</code></small>
       </form>

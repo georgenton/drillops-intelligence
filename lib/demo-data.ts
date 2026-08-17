@@ -1,9 +1,9 @@
 import type { Crown, Drillhole, Interval, Rig, Shift, Tenant } from "@/packages/domain/types";
 
 export const tenants: Tenant[] = [
-  { id:"extract", name:"Extract Services Demo", slug:"extract-services", color:"#d7ff43", plan:"Professional", status:"active" },
-  { id:"minera-a", name:"Cliente Minero Demo A", slug:"minero-demo-a", color:"#56c7ff", plan:"Starter", status:"trial" },
-  { id:"minera-b", name:"Cliente Minero Demo B", slug:"minero-demo-b", color:"#ff9e64", plan:"Enterprise", status:"active" },
+  { id:"extract", name:"Extract Services Demo", slug:"extract-services", color:"#d7ff43", plan:"Premium", status:"active" },
+  { id:"minera-a", name:"Cliente Minero Demo A", slug:"minero-demo-a", color:"#56c7ff", plan:"Básico", status:"trial" },
+  { id:"minera-b", name:"Cliente Minero Demo B", slug:"minero-demo-b", color:"#ff9e64", plan:"Intermedio", status:"active" },
 ];
 
 export const rigs: Rig[] = [

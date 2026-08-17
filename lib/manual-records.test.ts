@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumableRecordSchema, crownRecordSchema, drillholeRecordSchema, intervalRecordSchema, inventoryMovementRecordSchema, shiftRecordSchema } from "./manual-records";
+import { consumableRecordSchema, crownRecordSchema, drillholeRecordSchema, intervalRecordSchema, inventoryMovementRecordSchema, reportAttachmentRecordSchema, shiftRecordSchema } from "./manual-records";
 
 describe("validación de registros manuales", () => {
   it("rechaza un sondeo cuya profundidad actual supera el objetivo", () => {
@@ -8,8 +8,14 @@ describe("validación de registros manuales", () => {
   });
 
   it("rechaza horas de turno imposibles", () => {
-    const result = shiftRecordSchema.safeParse({ drillholeId:"hole-1", rigId:"rig-1", date:"2026-08-08", type:"Día", crew:"Águila", depthStart:100, depthEnd:120, effectiveHours:10, totalHours:12, npt:{ Otros:3 } });
+    const result = shiftRecordSchema.safeParse({ drillholeId:"hole-1", rigId:"rig-1", date:"2026-08-08", type:"Día", crew:"Águila", supervisor:"Luis Paredes", driller:"Miguel Vera", depthStart:100, depthEnd:120, effectiveHours:10, totalHours:12, npt:{ Otros:3 } });
     expect(result.success).toBe(false);
+  });
+
+  it("exige supervisor y perforador en cada turno", () => {
+    const result = shiftRecordSchema.safeParse({ drillholeId:"hole-1", rigId:"rig-1", date:"2026-08-08", type:"Día", crew:"Águila", depthStart:100, depthEnd:120, effectiveHours:9, totalHours:12, npt:{ Otros:2 } });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map((issue) => issue.path[0])).toEqual(expect.arrayContaining(["supervisor", "driller"]));
   });
 
   it("acepta un intervalo operacional válido", () => {
@@ -24,6 +30,7 @@ describe("validación de registros manuales", () => {
 
   it("valida movimientos positivos y consumos completos", () => {
     expect(inventoryMovementRecordSchema.safeParse({ crownId:"crown-1", type:"entrada", quantity:3, date:"2026-08-08", note:"Ingreso" }).success).toBe(true);
-    expect(consumableRecordSchema.safeParse({ date:"2026-08-08", type:"Agua", quantity:1200, unit:"L", cost:42, drillhole:"SEC-42D", rig:"MP-07" }).success).toBe(true);
+    expect(consumableRecordSchema.safeParse({ date:"2026-08-08", type:"Agua", quantity:1200, unit:"L", cost:42, drillhole:"SEC-42D", rig:"MP-07", metresDrilled:60 }).success).toBe(true);
+    expect(reportAttachmentRecordSchema.safeParse({ fileName:"frente.webp", mimeType:"image/webp", dataUrl:"data:image/webp;base64,AA==", caption:"Frente", capturedAt:"2026-08-08" }).success).toBe(true);
   });
 });

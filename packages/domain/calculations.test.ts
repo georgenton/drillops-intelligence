@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateMseMpa, calculateRop, calculateRunCosts, calculateUtilization } from "./calculations";
+import { calculateMseMpa, calculateRop, calculateRunCosts, calculateUtilization, forecastAdvance24h } from "./calculations";
 
 describe("cálculos operacionales", () => {
   it("calcula ROP y protege división por cero", () => {
@@ -17,5 +17,13 @@ describe("cálculos operacionales", () => {
     expect(r.bitCostPerMetre).toBe(20);
     expect(r.rigCostPerMetre).toBe(30);
     expect(r.totalCostPerMetre).toBe(55);
+  });
+
+  it("proyecta avance con tendencia, rango y confianza reproducibles", () => {
+    const forecast=forecastAdvance24h([30,32,34,35,37,39,40].map(metres=>({metres})));
+    expect(forecast.central).toBeGreaterThan(37);
+    expect(forecast.low).toBeLessThan(forecast.central);
+    expect(forecast.high).toBeGreaterThan(forecast.central);
+    expect(forecast.observations).toBe(7);
   });
 });
