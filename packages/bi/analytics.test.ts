@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getDemoBiDataset } from "@/lib/bi-data";
-import { buildOperationalSnapshot } from "./analytics";
+import { buildOperationalSnapshot, buildShiftRigPerformance } from "./analytics";
 
 describe("snapshot operacional único", () => {
   it("reconcilia dashboard, profundidad, NPT y corona activa con el mismo dataset", () => {
@@ -24,5 +24,14 @@ describe("snapshot operacional único", () => {
     expect(snapshot.daily).toHaveLength(0);
     expect(snapshot.nptTotal).toBe(0);
     expect(snapshot.hole?.code).toBe("CON-12");
+  });
+
+  it("agrupa el rendimiento por fecha, guardia y máquina", () => {
+    const rows = buildShiftRigPerformance(getDemoBiDataset("extract").shifts.slice(0, 4));
+
+    expect(rows).toEqual([
+      { date: "2026-08-01", rigId: "mp-07", dayMetres: 33, nightMetres: 36 },
+      { date: "2026-08-02", rigId: "mp-07", dayMetres: 30, nightMetres: 39 },
+    ]);
   });
 });

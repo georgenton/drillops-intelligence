@@ -9,6 +9,9 @@ const format = (value: number, digits = 1) => new Intl.NumberFormat("es-EC", { m
 const labelDate = (date: string) => new Intl.DateTimeFormat("es-EC", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 
 function inferMetric(question: string): BiMetric {
+  if (/consumible|diesel|diésel|aditivo|bentonita|xantica|xántica|water control/.test(question)) return "consumables";
+  if (/energia mecanica|energía mecánica|\bmse\b/.test(question)) return "mse";
+  if (/programad|planificad|meta diaria|cumplimiento/.test(question)) return "planned";
   if (/tiempo perdido|\bnpt\b|no productiv|causas?/.test(question)) return "npt";
   if (/recuperacion|recovery/.test(question)) return "recovery";
   if (/presion|pressure/.test(question)) return "pressure";
@@ -94,6 +97,21 @@ function nptChart(snapshot: OperationalSnapshot, request: BiQueryRequest): BiCha
   };
 }
 
+function plannedChart(snapshot: OperationalSnapshot, request: BiQueryRequest): BiChartSpec {
+  const imperial = request.units === "imperial", factor = imperial ? METRES_TO_FEET : 1, unit = imperial ? "ft" : "m";
+  const planned = (snapshot.hole?.plannedDailyMetres ?? safeDivide(snapshot.kpis.metres, snapshot.daily.length)) * factor;
+  return { type: request.chartType ?? "bar", title: "Ejecutado vs programado", subtitle: `Meta diaria configurada · ${snapshot.period.label}`, xAxisLabel: "Fecha", yAxisLabel: unit, unit, categories: snapshot.daily.map((item) => labelDate(item.date)), series: [{ name: "Ejecutado", data: snapshot.daily.map((item) => round(item.metres * factor, 1)), color: COLORS[1] }, { name: "Programado", data: snapshot.daily.map(() => round(planned, 1)), color: COLORS[0] }] };
+}
+
+function consumablesChart(request: BiQueryRequest, rows: Array<{ month: string; cost: number }>): BiChartSpec {
+  return { type: request.chartType ?? "bar", title: "Costo mensual de consumibles", subtitle: "Fuente histórica Raúl · diciembre 2022 a marzo 2023", xAxisLabel: "Mes", yAxisLabel: "USD", unit: "USD", categories: rows.map((row) => row.month), series: [{ name: "Costo", data: rows.map((row) => round(row.cost, 2)), color: COLORS[0] }] };
+}
+
+function mseChart(request: BiQueryRequest, intervals: Array<{ startDepth: number; endDepth: number; mse?: number }>): BiChartSpec {
+  const sampled=intervals.filter((_,index)=>index%3===0||index===intervals.length-1), imperial=request.units==="imperial";
+  return { type: request.chartType ?? "line", title: "Energía mecánica específica", subtitle: "Calculada con WOB, torque, RPM, ROP y diámetro del sondeo", xAxisLabel: imperial?"Profundidad (ft)":"Profundidad (m)", yAxisLabel:"MPa", unit:"MPa", categories:sampled.map((item)=>format(((item.startDepth+item.endDepth)/2)*(imperial?METRES_TO_FEET:1),0)),series:[{name:"MSE",data:sampled.map(item=>round(item.mse??0,1)),color:COLORS[5]}] };
+}
+
 function crownChart(snapshot: OperationalSnapshot, request: BiQueryRequest, crowns: Array<{ product: string; rop: number; cost: number }>): BiChartSpec {
   const imperial = request.units === "imperial";
   const unit = imperial ? "USD/ft" : "USD/m";
@@ -132,13 +150,28 @@ function intervalChart(metric: "recovery" | "pressure" | "torque" | "rpm", reque
 
 export function executeBiQuery(snapshot: OperationalSnapshot, request: BiQueryRequest, context?: {
   crowns?: Array<{ product: string; rop: number; cost: number; available: number }>;
-  intervals?: Array<{ startDepth: number; endDepth: number; recovery: number; pressure?: number; torque?: number; rpm?: number }>;
+  intervals?: Array<{ startDepth: number; endDepth: number; recovery: number; pressure?: number; torque?: number; rpm?: number; mse?: number }>;
+  monthlyConsumables?: Array<{ month: string; cost: number }>;
+  consumableItems?: Array<{ item: string; cost: number }>;
+  includeCosts?: boolean;
 }): BiAnswer {
   const imperial = request.units === "imperial";
   const lengthUnit = imperial ? "ft" : "m";
   const speedUnit = imperial ? "ft/h" : "m/h";
   const lengthFactor = imperial ? METRES_TO_FEET : 1;
   const links: BiAnswer["links"] = [{ label: "Abrir dashboard", href: "/dashboard" }];
+  if (request.metric === "planned") {
+    const target=(snapshot.hole?.plannedDailyMetres??safeDivide(snapshot.kpis.metres,snapshot.daily.length))*snapshot.daily.length,compliance=safeDivide(snapshot.kpis.metres,target)*100;
+    return { answer:`Se ejecutaron ${format(snapshot.kpis.metres,1)} m frente a ${format(target,1)} m programados en ${snapshot.period.days} días: ${format(compliance,1)}% de cumplimiento.`,chart:plannedChart(snapshot,request),facts:[{label:"Meta diaria",value:`${format(snapshot.hole?.plannedDailyMetres??0,1)} m`},{label:"Cumplimiento",value:`${format(compliance,1)}%`}],links:[{label:"Abrir dashboard",href:"/dashboard"},{label:"Ver sondeo",href:"/sondeos"}],tool:"compare_planned_actual"};
+  }
+  if (request.metric === "consumables") {
+    const monthly=context?.monthlyConsumables??[],items=context?.consumableItems??[],latest=monthly.at(-1),top=items.slice().sort((a,b)=>b.cost-a.cost)[0];
+    return {answer:latest?`En ${latest.month} el costo de consumibles fue ${format(latest.cost,2)} USD.${top?` El principal rubro fue ${top.item} con ${format(top.cost,2)} USD.`:""}`:"No hay consumibles históricos disponibles.",chart:consumablesChart(request,monthly),facts:items.slice(0,3).map(item=>({label:item.item,value:`$${format(item.cost,2)}`})),links:[{label:"Ver consumibles",href:"/consumibles"}],tool:"get_consumables_history"};
+  }
+  if (request.metric === "mse") {
+    const intervals=context?.intervals??[],values=intervals.flatMap(item=>item.mse&&item.mse>0?[item.mse]:[]),average=safeDivide(values.reduce((sum,value)=>sum+value,0),values.length);
+    return {answer:values.length?`La MSE media calculada es ${format(average,1)} MPa sobre ${values.length} intervalos. Se presenta como indicador de eficiencia de perforación, no como litología inferida.`:"Faltan WOB, torque, RPM o ROP válidos para calcular MSE.",chart:mseChart(request,intervals),facts:values.length?[{label:"MSE mínima",value:`${format(Math.min(...values),1)} MPa`},{label:"MSE máxima",value:`${format(Math.max(...values),1)} MPa`}]:[],links:[{label:"Abrir Depth Intelligence",href:"/depth-intelligence"}],tool:"get_mse_by_depth"};
+  }
   if (request.metric === "npt") {
     const top = snapshot.npt[0];
     return {
@@ -217,7 +250,7 @@ export function executeBiQuery(snapshot: OperationalSnapshot, request: BiQueryRe
   return {
     answer: `${snapshot.hole?.code ?? "El sondeo"} está en ${format(snapshot.kpis.currentDepth, 1)} de ${format(snapshot.kpis.targetDepth, 1)} m. En los últimos ${snapshot.period.days} días avanzó ${format(snapshot.kpis.metres, 1)} m, con ROP ponderado de ${format(snapshot.kpis.rop, 2)} m/h y ${format(snapshot.kpis.utilization, 1)}% de utilización.${topNpt ? ` El NPT principal fue ${topNpt.cause.toLowerCase()} (${format(topNpt.hours, 1)} h).` : ""}`,
     chart: temporalChart(snapshot, "metres", { ...request, metric: "metres" }),
-    facts: [{ label: "Costo operativo", value: `$${format(snapshot.kpis.operationalCostPerMetre, 1)}/m` }, { label: "Alertas", value: String(snapshot.alerts.length) }],
+    facts: [...(context?.includeCosts === false ? [] : [{ label: "Costo operativo", value: `$${format(snapshot.kpis.operationalCostPerMetre, 1)}/m` }]), { label: "Alertas", value: String(snapshot.alerts.length) }],
     links: [{ label: "Abrir dashboard", href: "/dashboard" }, { label: "Abrir Depth Intelligence", href: "/depth-intelligence" }],
     tool: "summarize_drillhole",
   };
@@ -232,7 +265,7 @@ export function unitSystemFromTool(value: unknown): BiUnitSystem {
 }
 
 export function metricFromTool(value: unknown): BiMetric {
-  const metrics: BiMetric[] = ["metres", "rop", "utilization", "npt", "depth", "recovery", "pressure", "torque", "rpm", "crowns", "eta", "summary"];
+  const metrics: BiMetric[] = ["metres", "planned", "rop", "utilization", "npt", "depth", "recovery", "pressure", "torque", "rpm", "mse", "consumables", "crowns", "eta", "summary"];
   return metrics.includes(value as BiMetric) ? value as BiMetric : "summary";
 }
 

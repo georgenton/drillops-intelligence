@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { signSession } from "@/lib/auth";
+import { defaultSection, tenantPlan } from "@/lib/access-control";
 
 const schema = z.object({ email:z.string().email(), password:z.string().min(8) });
 const users = {
   "platform@demo.local": { name:"Andrea Plataforma", role:"platform_admin", tenantId:"extract" },
-  "owner@extract.demo": { name:"Carlos Mendoza", role:"tenant_owner", tenantId:"extract" },
-  "supervisor@extract.demo": { name:"Raúl Supervisor", role:"supervisor", tenantId:"extract" },
-  "operator@extract.demo": { name:"Miguel Operador", role:"operator", tenantId:"extract" },
+  "gerencia@extract.demo": { name:"Carlos Mendoza", role:"general_manager", tenantId:"extract" },
+  "cliente@extract.demo": { name:"María Cliente", role:"client", tenantId:"extract" },
+  "supervisor@extract.demo": { name:"Raúl Supervisor", role:"operations_supervisor", tenantId:"extract" },
+  "perforador@extract.demo": { name:"Miguel Perforador", role:"driller", tenantId:"extract" },
+  "control@extract.demo": { name:"Elena Control", role:"control", tenantId:"extract" },
+  "basico@minera-a.demo": { name:"Gerencia Plan Básico", role:"general_manager", tenantId:"minera-a" },
+  "intermedio@minera-b.demo": { name:"Gerencia Plan Intermedio", role:"general_manager", tenantId:"minera-b" },
 } as const;
 
 export async function POST(request: Request) {
@@ -16,7 +21,7 @@ export async function POST(request: Request) {
   if (!parsed.success || parsed.data.password !== "DrillOps2026!" || !(parsed.data.email in users)) return NextResponse.json({error:"Credenciales inválidas"},{status:401});
   const email = parsed.data.email as keyof typeof users;
   const token = signSession({ email, ...users[email] });
-  const response = NextResponse.json({ ok:true });
+  const response = NextResponse.json({ ok:true, landing: defaultSection(users[email].role, tenantPlan(users[email].tenantId)) });
   response.cookies.set("drillops_session",token,{httpOnly:true,sameSite:"strict",secure:process.env.NODE_ENV==="production",path:"/",maxAge:8*60*60});
   return response;
 }
