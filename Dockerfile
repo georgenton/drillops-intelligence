@@ -11,6 +11,8 @@ RUN pnpm build
 
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
+# Coolify's HTTP readiness probe uses curl even when the image has HEALTHCHECK.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 ARG GIT_SHA=unknown
 ENV APP_REVISION=${GIT_SHA}

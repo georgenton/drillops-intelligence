@@ -5,9 +5,17 @@ Mandato: Notion 24, ejecución A+B+C+D. Rama `codex/authorized-delivery-oct14`, 
 | Bloque | Estado comprobado | Evidencia | Siguiente paso |
 |---|---|---|---|
 | A · OVH | Recursos aislados creados; staging PostgreSQL privado sano, migraciones originales y0003 aplicadas. Vercel desconectado de Git; Railway autodeploy desactivado, volumen conservado. | infra/DEPLOYMENT_STATE.md; Docker build check | Imagen exacta, deploy y HTTPS |
-| B · Datos | Adaptador seguro y fuente canónica implementados. Archivo autorizado conciliado exactamente:31 libros,248 turnos,2813.25m,1280h. Persistencia/reimportación en OVH en ejecución. | packages/import;13 comprobaciones PostgreSQL locales con rol no-superuser/no-bypass | Verificar importación privada y E2E |
-| C · Advisor | Motor V2,58 pruebas, historial conservador, escenarios, comparación y decisión persistida implementados. No modelo físico/cliente validado. | packages/domain/{rop-model,crown-history};components/rop-scenario | Recorrido UI/decisión recargada |
-| D · Pruebas/transición |110 unitarias PASS, lint/typecheck/build PASS en corte de trabajo; cero vulnerabilidades producción. R2 privado creado y credencial acotada con aprobación específica. | scripts/test-operational-integration.ts;pnpm checks | E2E, backup/restauración, checks HEAD final |
+| B · Datos | Adaptador seguro y fuente canónica implementados. Archivo autorizado conciliado y persistido en OVH:31 libros,248 turnos,2813.25m,1280h. Reimportación real idempotente comprobada. | packages/import;14 comprobaciones PostgreSQL locales con rol no-owner/no-superuser/no-bypass; scripts/staging-intake.ts | Verificar recorrido HTTPS desplegado |
+| C · Advisor | Motor V2,58 pruebas matemáticas/historial, escenarios, comparación y decisión persistida implementados. E2E verifica decisión+escenario tras recarga y en reporte. No modelo físico/cliente validado. | packages/domain/{rop-model,crown-history};components/rop-scenario; scripts/operational-e2e.spec.ts | Verificación HTTPS con datos privados |
+| D · Pruebas/transición |143 unitarias PASS, lint/typecheck/build PASS,14 comprobaciones PostgreSQL PASS y E2E producción local PASS; cero vulnerabilidades conocidas de dependencias productivas. Backup real R2 restaurado y conciliado en28tablas. | CI push38645423379 y PR38645430543 SUCCESS; imagen38645423397 SUCCESS | Despliegue serial y cierre de transición |
+
+## Candidato verificado
+
+SHA `d9fe81425d1d205f0ba7f36b98a069e02f2db9d2`, [PR#2](https://github.com/georgenton/drillops-intelligence/pull/2) contra staging. Índice de imagen `ghcr.io/georgenton/drillops-intelligence@sha256:c508382592e43b2f7476b5be6c36cd2e7e49507cd81c41e1f7c89d3fcd6f9b3b`. No se ha fusionado PR#1 ni alterado main.
+
+E2E local: login individual, importación y reimportación, corrección auditada, KPIs consistentes en dashboard/reporte/asistente, filtros persistentes, coronas, escenario, decisión recargada, reporte imprimible, acceso denegado por perfil y empresa, desktop/móvil sin errores de consola. Pruebas adicionales confirman DB no disponible sin seed y producción cerrada.
+
+R2: credenciales de objetos distintas y limitadas a un bucket; seis intentos cruzados denegados403. Bases: seis conexiones cruzadas denegadas28P01. Backups diarios separados; retención14d configurada, envejecimiento y primera ejecución programada todavía por observar.
 
 ## Decisiones técnicas
 
