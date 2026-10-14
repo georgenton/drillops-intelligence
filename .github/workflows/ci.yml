@@ -5,17 +5,39 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: drillops_test
+          POSTGRES_PASSWORD: local-disposable-only
+          POSTGRES_DB: drillops_test
+        ports: ["5448:5432"]
+        options: >-
+          --health-cmd "pg_isready -U drillops_test -d drillops_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://drillops_test:local-disposable-only@127.0.0.1:5448/drillops_test
+      DEMO_MODE: "false"
+      DRILLOPS_ENV: staging
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      APP_ORIGIN: http://127.0.0.1:3000
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with: { version: 10.33.2 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 20, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm db:migrate && pnpm db:migrate:operational && pnpm test:integration
       - run: pnpm build
         env:
-          DEMO_MODE: "true"
           AUTH_SECRET: ci-only-secret
+      - run: pnpm exec tsx scripts/seed-e2e.ts
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+        env:
+          DRILLOPS_E2E_START_SERVER: "true"

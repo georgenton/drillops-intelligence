@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import { getDemoBiDataset } from "@/lib/bi-data";
-import { tenants as demoTenants } from "@/lib/demo-data";
 import { db } from "@/packages/db/client";
 import {
   bitProducts,
@@ -8,28 +7,57 @@ import {
   drillholes as dbDrillholes,
   intervals as dbIntervals,
   inventory,
+  manualRecords,
   projects,
   rigs as dbRigs,
   shifts as dbShifts,
   surveys as dbSurveys,
-  tenants as dbTenants,
 } from "@/packages/db/schema";
+import { resolveTenantDatabaseId } from "@/packages/db/tenant";
 import { calculateRop, safeDivide } from "@/packages/domain/calculations";
 import type { BiDataset } from "./types";
-import type { Crown, Diameter, Level, TenantId } from "@/packages/domain/types";
+import type { Crown, Diameter, Drillhole, Interval, Level, Rig, Shift, TenantId } from "@/packages/domain/types";
 
 const number = (value: string | number | null | undefined) => Number(value ?? 0);
 
+function mergeManual<T extends { id: string }>(seed: T[], rows: Array<{ id: string; payload: unknown }>): T[] {
+  const manual = rows.map((row) => ({ ...(row.payload as object), id: row.id }) as T);
+  const ids = new Set(manual.map((row) => row.id));
+  return [...seed.filter((row) => !ids.has(row.id)), ...manual];
+}
+
+function applyInventoryMovements(catalog: Crown[], rows: Array<{ payload: unknown }>): Crown[] {
+  return catalog.map((crown) => {
+    const movements = rows.map((row) => row.payload as { crownId?: string; type?: string; quantity?: number }).filter((movement) => movement.crownId === crown.id);
+    const total = (type: string) => movements.filter((movement) => movement.type === type).reduce((sum, movement) => sum + Number(movement.quantity ?? 0), 0);
+    const stock = Math.max(0, crown.stock + total("entrada") - total("salida"));
+    const reserved = Math.max(0, Math.min(stock, crown.reserved + total("reserva") - total("liberacion")));
+    return { ...crown, stock, reserved };
+  });
+}
+
 export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
   const demo = getDemoBiDataset(tenantId);
-  if (process.env.DEMO_MODE !== "false" || !db) return demo;
-  const tenantSlug = demoTenants.find((tenant) => tenant.id === tenantId)?.slug;
-  if (!tenantSlug) return demo;
+  if (!db) { if(process.env.DEMO_MODE === "true") return demo; throw new Error("DATABASE_UNAVAILABLE"); }
 
   try {
-    const [tenant] = await db.select({ id: dbTenants.id }).from(dbTenants).where(eq(dbTenants.slug, tenantSlug)).limit(1);
-    if (!tenant) return demo;
-    const tenantScope = tenant.id;
+    const tenantScope = await resolveTenantDatabaseId(tenantId);
+    if (!tenantScope) { if(process.env.DEMO_MODE === "true") return demo; throw new Error("TENANT_NOT_FOUND"); }
+    if (process.env.DEMO_MODE === "true") {
+      const rows = await db.select({ id: manualRecords.id, kind: manualRecords.kind, payload: manualRecords.payload }).from(manualRecords).where(eq(manualRecords.tenantId, tenantScope));
+      if (!rows.length) return demo;
+      const ofKind = (kind: string) => rows.filter((row) => row.kind === kind);
+      const catalog = mergeManual<Crown>(demo.crowns, ofKind("crown"));
+      return {
+        ...demo,
+        source: "database",
+        rigs: mergeManual<Rig>(demo.rigs, ofKind("rig")),
+        drillholes: mergeManual<Drillhole>(demo.drillholes, ofKind("drillhole")),
+        shifts: mergeManual<Shift>(demo.shifts, ofKind("shift")),
+        intervals: mergeManual<Interval>(demo.intervals, ofKind("interval")),
+        crowns: applyInventoryMovements(catalog, ofKind("inventory_movement")),
+      };
+    }
     const [holeRows, rigRows, shiftRows, intervalRows, productRows, runRows, inventoryRows, surveyRows] = await Promise.all([
       db.select({
         id: dbDrillholes.id,
@@ -76,7 +104,7 @@ export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
       db.select().from(inventory).where(eq(inventory.tenantId, tenantScope)),
       db.select().from(dbSurveys).where(eq(dbSurveys.tenantId, tenantScope)),
     ]);
-    if (!holeRows.length || !shiftRows.length) return demo;
+    if (!holeRows.length || !shiftRows.length) return {tenantId,source:"database",drillholes:[],rigs:[],shifts:[],intervals:[],crowns:[],survey:[]};
 
     const crowns: Crown[] = productRows.map((product) => {
       const productRuns = runRows.filter((run) => run.bitProductId === product.id);
@@ -176,6 +204,7 @@ export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
       survey: surveyRows.map((point) => ({ depth: number(point.measuredDepth), inclination: number(point.inclination), azimuth: number(point.azimuth) })),
     };
   } catch {
-    return demo;
+    if(process.env.DEMO_MODE === "true") return demo;
+    throw new Error("DATABASE_UNAVAILABLE");
   }
 }

@@ -61,10 +61,19 @@ pnpm db:reset
 
 Monolito modular con Next.js App Router, TypeScript strict, Tailwind CSS, ECharts, Drizzle y PostgreSQL. La API interna está bajo `/api/v1`. La UI usa seed determinístico cuando `DEMO_MODE=true`; las tablas SQL e índices están listas para persistencia real.
 
+## Staging publicado
+
+- Aplicación: [drillops-intelligence-web.vercel.app](https://drillops-intelligence-web.vercel.app)
+- Repositorio: [georgenton/drillops-intelligence](https://github.com/georgenton/drillops-intelligence)
+- Rama de despliegue: `staging`
+- Datos: PostgreSQL 18 en el entorno `staging` del proyecto Railway `drillops-intelligence`
+
+El proyecto de Vercel es un entorno dedicado de staging. Sirve el frontend y los Route Handlers de Next.js; Railway mantiene PostgreSQL y su volumen persistente. Las credenciales viven únicamente en las variables protegidas de cada plataforma.
+
 ### Asistente BI
 
 Dashboard, reporte, alertas y asistente consumen `packages/bi/analytics.ts`, por lo que un mismo periodo produce una sola cifra oficial. Sin clave de OpenAI, el router de consultas es determinístico. Con `OPENAI_API_KEY`, la Responses API usa una función estricta de solo lectura para elegir indicador, unidades y tipo de gráfica, incluso sobre los datos demo. En producción (`DEMO_MODE=false`), `/api/v1/assistant` intenta consultar PostgreSQL con alcance por tenant y mantiene el dataset demo como respaldo cuando la base todavía está vacía. Si OpenAI no está disponible, conserva el cálculo y la gráfica mediante el motor local.
 
 Para habilitar OpenAI configura `OPENAI_API_KEY` únicamente en el servidor y usa un modelo compatible en `OPENAI_MODEL` (por defecto `gpt-5.6`). La clave nunca se expone al navegador.
 
-Consulta [PRODUCT.md](/Users/jorgequizamanchuro/Projects_local/drillops%20intelligence/docs/PRODUCT.md), [DEMO_SCRIPT.md](/Users/jorgequizamanchuro/Projects_local/drillops%20intelligence/docs/DEMO_SCRIPT.md) y [DEPLOY.md](/Users/jorgequizamanchuro/Projects_local/drillops%20intelligence/docs/DEPLOY.md).
+Consulta [PRODUCT.md](docs/PRODUCT.md), [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) y [DEPLOY.md](docs/DEPLOY.md).

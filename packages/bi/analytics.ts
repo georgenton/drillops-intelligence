@@ -1,5 +1,5 @@
 import { calculateRop, calculateUtilization, estimateCompletion, safeDivide } from "@/packages/domain/calculations";
-import type { Crown, Interval } from "@/packages/domain/types";
+import type { Crown, Interval, Shift } from "@/packages/domain/types";
 import type { BiDataset, DailyPerformance, OperationalSnapshot } from "./types";
 
 const ANALYTICS_NOW = new Date("2026-08-07T12:00:00-05:00");
@@ -48,6 +48,28 @@ function buildDaily(shifts: BiDataset["shifts"]): DailyPerformance[] {
     utilization: round(calculateUtilization(item.effectiveHours, item.totalHours), 1),
     nptHours: round(item.nptHours, 1),
   }));
+}
+
+export interface ShiftRigPerformance {
+  date: string;
+  rigId: string;
+  dayMetres: number;
+  nightMetres: number;
+}
+
+export function buildShiftRigPerformance(shifts: Shift[]): ShiftRigPerformance[] {
+  const grouped = new Map<string, ShiftRigPerformance>();
+  for (const shift of shifts) {
+    const key = `${shift.date}:${shift.rigId}`;
+    const item = grouped.get(key) ?? { date: shift.date, rigId: shift.rigId, dayMetres: 0, nightMetres: 0 };
+    const metres = Math.max(0, shift.depthEnd - shift.depthStart);
+    if (shift.type === "Día") item.dayMetres += metres;
+    else item.nightMetres += metres;
+    grouped.set(key, item);
+  }
+  return [...grouped.values()]
+    .sort((a, b) => a.date.localeCompare(b.date) || a.rigId.localeCompare(b.rigId))
+    .map((item) => ({ ...item, dayMetres: round(item.dayMetres, 1), nightMetres: round(item.nightMetres, 1) }));
 }
 
 export function buildOperationalSnapshot(dataset: BiDataset, drillholeId?: string, periodDays = 7): OperationalSnapshot {
