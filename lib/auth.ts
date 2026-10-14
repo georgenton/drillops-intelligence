@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { isDemoMode } from "./runtime-mode";
 import { canonicalRoles, type SessionRole } from "@/lib/access-control";
 
 export type DemoSession = { email: string; name: string; role: SessionRole; tenantId: "extract"|"minera-a"|"minera-b"; exp: number };
@@ -19,6 +20,7 @@ export function signSession(payload: Omit<DemoSession,"exp">): string {
 
 export function verifySession(token?: string): DemoSession | null {
   try {
+    if (!isDemoMode()) return null;
     if (!token) return null;
     const [data,sig,...extra] = token.split(".");
     if (!data || !sig || extra.length) return null;

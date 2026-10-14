@@ -10,3 +10,8 @@ coverage
 *.tsbuildinfo
 .env*
 !.env.example
+test-results/
+playwright-report/
+*.dump
+*.zip
+*.xlsx

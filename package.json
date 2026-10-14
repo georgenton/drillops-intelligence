@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -12,6 +14,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "tsx scripts/test-operational-integration.ts",
+    "test:e2e": "playwright test",
+    "db:migrate:operational": "tsx scripts/migrate-operational.ts",
     "db:up": "docker compose -p drillops-intelligence -f infra/docker-compose.yml up -d",
     "db:down": "docker compose -p drillops-intelligence -f infra/docker-compose.yml down",
     "db:reset": "docker compose -p drillops-intelligence -f infra/docker-compose.yml down -v && pnpm db:up && pnpm db:migrate && pnpm db:seed",
@@ -21,23 +26,25 @@
     "setup": "pnpm install && pnpm db:up && pnpm db:migrate && pnpm db:seed"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
     "@hookform/resolvers": "3.10.0",
     "bcryptjs": "3.0.2",
     "clsx": "2.1.1",
     "drizzle-orm": "0.45.2",
     "echarts": "6.1.0",
     "lucide-react": "1.30.0",
-    "next": "16.2.10",
+    "next": "16.4.1",
     "openai": "7.4.0",
     "pg": "8.22.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-hook-form": "7.84.0",
-    "xlsx": "0.18.5",
+    "saxes": "6.0.0",
     "zod": "3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.5",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.18.1",
     "@types/pg": "8.20.0",
@@ -45,7 +52,7 @@
     "@types/react-dom": "19.2.3",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.4.1",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.0",
     "typescript": "5.9.3",

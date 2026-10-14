@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { signSession } from "@/lib/auth";
 import { defaultSection, tenantPlan } from "@/lib/access-control";
+import { isDemoMode } from "@/lib/runtime-mode";
 
 const schema = z.object({ email:z.string().email(), password:z.string().min(8) });
 const users = {
@@ -16,7 +17,7 @@ const users = {
 } as const;
 
 export async function POST(request: Request) {
-  if (process.env.DEMO_MODE === "false") return NextResponse.json({error:"Acceso demo deshabilitado"},{status:403});
+  if (!isDemoMode()) return NextResponse.json({error:"Acceso demo deshabilitado"},{status:403});
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success || parsed.data.password !== "DrillOps2026!" || !(parsed.data.email in users)) return NextResponse.json({error:"Credenciales inválidas"},{status:401});
   const email = parsed.data.email as keyof typeof users;

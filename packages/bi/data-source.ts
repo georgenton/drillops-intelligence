@@ -38,12 +38,12 @@ function applyInventoryMovements(catalog: Crown[], rows: Array<{ payload: unknow
 
 export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
   const demo = getDemoBiDataset(tenantId);
-  if (!db) return demo;
+  if (!db) { if(process.env.DEMO_MODE === "true") return demo; throw new Error("DATABASE_UNAVAILABLE"); }
 
   try {
     const tenantScope = await resolveTenantDatabaseId(tenantId);
-    if (!tenantScope) return demo;
-    if (process.env.DEMO_MODE !== "false") {
+    if (!tenantScope) { if(process.env.DEMO_MODE === "true") return demo; throw new Error("TENANT_NOT_FOUND"); }
+    if (process.env.DEMO_MODE === "true") {
       const rows = await db.select({ id: manualRecords.id, kind: manualRecords.kind, payload: manualRecords.payload }).from(manualRecords).where(eq(manualRecords.tenantId, tenantScope));
       if (!rows.length) return demo;
       const ofKind = (kind: string) => rows.filter((row) => row.kind === kind);
@@ -104,7 +104,7 @@ export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
       db.select().from(inventory).where(eq(inventory.tenantId, tenantScope)),
       db.select().from(dbSurveys).where(eq(dbSurveys.tenantId, tenantScope)),
     ]);
-    if (!holeRows.length || !shiftRows.length) return demo;
+    if (!holeRows.length || !shiftRows.length) return {tenantId,source:"database",drillholes:[],rigs:[],shifts:[],intervals:[],crowns:[],survey:[]};
 
     const crowns: Crown[] = productRows.map((product) => {
       const productRuns = runRows.filter((run) => run.bitProductId === product.id);
@@ -204,6 +204,7 @@ export async function loadBiDataset(tenantId: TenantId): Promise<BiDataset> {
       survey: surveyRows.map((point) => ({ depth: number(point.measuredDepth), inclination: number(point.inclination), azimuth: number(point.azimuth) })),
     };
   } catch {
-    return demo;
+    if(process.env.DEMO_MODE === "true") return demo;
+    throw new Error("DATABASE_UNAVAILABLE");
   }
 }
