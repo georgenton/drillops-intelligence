@@ -17,12 +17,17 @@ Project `evcg67bhovpflfaspygeqr9e` is exclusive to DrillOps.
 
 Apps reserve 512 MiB / 0.5 CPU each. Staging DB 512 MiB / 0.5 CPU; demo/production DB 256 MiB / 0.25 CPU. Separate generated admin credentials and private database resources. All three have distinct runtime credentials; `drillops_runtime` verified NOSUPERUSER/NOBYPASSRLS/NOCREATEDB/NOCREATEROLE. Public-schema DML/sequence grants only; no migration privileges. Auth secrets distinct. Demo `DEMO_MODE=true`, private environments false; production `COMMERCIAL_ACCESS_ENABLED=false`.
 
+PostgreSQL environment isolation checked with runtime credentials: three own-environment connections succeed; all six cross-environment attempts fail with `28P01` (invalid password). Apps use private internal database hostnames; admin SSH tunnels are localhost-only. `APP_ORIGIN` explicitly configured per environment at runtime; no shared cookie domain or build-time canonical origin.
+
 Proposed domains resolve to existing VPS: `demo.drillops.syntavera.dev`, `staging.drillops.syntavera.dev`, `drillops.syntavera.dev`. Certificates are NOT verified yet: prior-to-deploy HTTPS checks failed certificate verification. No DNS/root/MX settings changed.
 
 ## Legacy containment
 
 - Vercel `prj_unNwk7AuZ12Jvt7o37YHtYq6f4Hf` (`drillops-intelligence-web`, team `team_TN7oDqf0ALR7Gy4gKaOEEPKV`): Git disconnected; API read-back `link:null`, zero linked deploy hooks. Existing deployments/data retained.
+- Legacy project Vercel Authentication re-enabled for **all** deployments through project API, no plan purchase/change. Production alias and historical immutable URL both verified HTTP302 to Vercel SSO; no longer public application access. This reverses the historical preview-public setting under the newer safe-cutover mandate.
 - Railway project `e59a18a4-941c-45d2-8257-b9ec2444de7d`: only Postgres service `10562e7f-2ef5-4f10-b9e5-54664853128a`; no Git source or webhooks. Explicit service auto-deploy disabled. Vulnerability image update snoozed for 14 days on 2026-10-14 (not permanently removed); stop/retire after verified backup/cutover, or revisit before Oct 28. Database and volume remain running/intact. No new deployment invoked.
+
+Legacy data preserved: Railway PG18.6 inspected through preexisting authenticated SSH (public TLS is self-signed; verification was not disabled). Full custom dump 56,503 bytes, uploaded to private staging R2 key `legacy/railway-20261014.dump`, downloaded and SHA256 checked: `dad360bbc102aa84b6a347520ffc08cfb311a82f0c3e234e4eba58aa6c6250f3`. Restored successfully into NEW local PG18 container `drillops-legacy-restore-20261014`, DB `legacy_restore` (tmpfs, no public port). Exact source/restored counts checked: manual_records0, users4, tenants3, shifts0, drilling_intervals0, migrations3. No operational records copied from legacy into OVH; original DB volume and dumps retained. Stopping legacy service waits for verified OVH cutover.
 
 ## Build and release
 

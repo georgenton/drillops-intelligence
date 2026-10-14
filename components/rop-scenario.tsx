@@ -5,7 +5,8 @@ import { predictRop, ROP_MODEL_VERSION, scenario, twoPointDecay } from "@/packag
 
 /** Deliberately independent of operational data: explicit hypothetical inputs,
  * never defaults inferred from a shift average or an unconfirmed UCS. */
-export function RopScenario() {
+export type ScenarioAssumptions={r0:number;r1:number;elapsed:number;horizon:number;threshold:number;ucs:number|null;ucsSource:string};
+export function RopScenario({onAttach}:{onAttach?:(assumptions:ScenarioAssumptions)=>void}) {
   const [r0, setR0] = useState("4");
   const [r1, setR1] = useState("0.5");
   const [elapsed, setElapsed] = useState("2");
@@ -58,5 +59,6 @@ export function RopScenario() {
       <figcaption>Curva de velocidad hipotética; el avance mostrado es el área integrada, no ROP final × horas.</figcaption>
     </figure>}
     <p>Supuestos: misma corona, régimen y roca durante el horizonte; β constante. Extrapolación no validada físicamente. La caída de ROP no mide desgaste ni altura de matriz y no prescribe cargas, RPM o reafilado.</p>
+    {onAttach&&<button type="button" disabled={Boolean(error)||!output} onClick={()=>onAttach({r0:Number(r0),r1:Number(r1),elapsed:Number(elapsed),horizon:Number(horizon),threshold:Number(threshold),ucs:ucs.trim()?Number(ucs):null,ucsSource:source})}>Adjuntar este escenario a la decisión</button>}
   </section>;
 }

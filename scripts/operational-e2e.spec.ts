@@ -24,7 +24,9 @@ async function login(page: Page, name: "supervisor" | "client" | "other") {
   await page.goto("/login");
   await page.getByLabel("Correo electrónico").fill(`${name}@drillops-e2e.example.invalid`);
   await page.getByLabel("Contraseña").fill(password);
+  const response = page.waitForResponse(r => r.url().endsWith("/api/auth/login") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
+  expect((await response).status()).toBe(200);
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 }
@@ -61,8 +63,10 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   await page.getByLabel("Equipo", { exact: true }).selectOption("RIG-E2E-001");
   for (const section of ["Dashboard", "Reportes", "Drill Assistant"]) {
     await page.getByRole("link", { name: section, exact: true }).click();
+    const path = section === "Dashboard" ? "/dashboard" : section === "Reportes" ? "/reportes" : "/drill-assistant";
+    await expect(page).toHaveURL(url => url.pathname === path && url.searchParams.get("rig") === "RIG-E2E-001");
+    await expect(page.getByRole("heading", { name: section, exact: true })).toBeVisible();
     await expect(page.getByLabel("Equipo", { exact: true })).toHaveValue("RIG-E2E-001");
-    expect(new URL(page.url()).searchParams.get("rig")).toBe("RIG-E2E-001");
     await expect(page.locator("article").filter({ hasText: "Avance del periodo" }).getByRole("heading")).toHaveText("12 m");
     expect((await apiState(page.request)).summary.advanceM).toBe(12);
   }
@@ -72,13 +76,23 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   await page.getByRole("link", { name: "Bit Advisor", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Historial conservador de coronas" })).toBeVisible();
   await expect(page.getByText(/UCS_MISSING/)).toBeVisible();
+  await page.getByRole("button", { name: "Adjuntar este escenario a la decisión", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Se guardará como hipótesis");
   await page.getByLabel("Corona para decisión").selectOption("SYN-E2E-001");
   await page.getByLabel("Razón", { exact: true }).fill("Synthetic supervisor review, no physical validation claimed");
   await page.getByRole("button", { name: "Guardar decisión" }).click();
   await expect(page.getByRole("status")).toContainText("Decisión guardada");
   await page.reload();
   await expect(page.getByText(/Synthetic supervisor review, no physical validation claimed/)).toBeVisible();
-  expect((await apiState(page.request)).decisions).toHaveLength(1);
+  const persistedDecisions = (await apiState(page.request)).decisions;
+  expect(persistedDecisions).toHaveLength(1);
+  const persistedScenario = persistedDecisions[0].payload.scenario;
+  expect(persistedScenario.source).toBe("USER_SUPPLIED_HYPOTHETICAL");
+  expect(persistedScenario.modelState).toBe("NOT_VALIDATED");
+  expect(persistedScenario.modelVersion).toBe("rop-exponential-v2.1");
+  expect(persistedScenario.coefficients.betaPerHour).toBeCloseTo(1.0397207708399179, 14);
+  expect(persistedScenario.coefficients.alphaPerMpaHour).toBeNull();
+  expect(persistedScenario.coefficients.alphaStatus).toBe("UCS_MISSING");
   await page.screenshot({ path: "test-results/operational-e2e/synthetic-advisor-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "Bit Advisor", exact: true })).toBeVisible();

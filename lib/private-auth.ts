@@ -26,6 +26,7 @@ export async function privateSession(): Promise<PrivateSession | null> {
 }
 export function assertSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  const expected=new URL(process.env.NEXT_PUBLIC_APP_URL??request.url).origin;
+  // Server-only runtime configuration: NEXT_PUBLIC_* is frozen during image build.
+  const expected=new URL(process.env.APP_ORIGIN??request.url).origin;
   if (!origin || origin !== expected) throw new Error("ORIGIN_DENIED");
 }

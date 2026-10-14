@@ -14,6 +14,6 @@ export default defineConfig({
   use: { baseURL, ...devices["Desktop Chrome"], trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: startServer ? {
     command: "pnpm start --hostname 127.0.0.1 --port 3000", url: `${baseURL}/api/auth/mode`, reuseExistingServer: false, timeout: 60_000,
-    env: { DATABASE_URL: runtimeDatabase, DEMO_MODE: "false", DRILLOPS_ENV: "staging", COMMERCIAL_ACCESS_ENABLED: "false" },
+    env: { DATABASE_URL: runtimeDatabase, DEMO_MODE: "false", DRILLOPS_ENV: "staging", COMMERCIAL_ACCESS_ENABLED: "false", APP_ORIGIN: baseURL },
   } : undefined,
 });
