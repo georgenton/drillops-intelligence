@@ -94,8 +94,14 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   expect(persistedScenario.coefficients.alphaPerMpaHour).toBeNull();
   expect(persistedScenario.coefficients.alphaStatus).toBe("UCS_MISSING");
   await page.screenshot({ path: "test-results/operational-e2e/synthetic-advisor-desktop.png", fullPage: true });
+  await page.getByRole("link", { name: "Reportes", exact: true }).click();
+  await expect(page).toHaveURL(url => url.pathname === "/reportes" && url.searchParams.get("rig") === "RIG-E2E-001");
+  await expect(page.getByRole("heading", { name: "Decisiones del contexto · trazabilidad de supervisión", exact: true })).toBeVisible();
+  await expect(page.getByText("Synthetic supervisor review, no physical validation claimed", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Escenario hipotético rop-exponential-v2.1, no validado/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Imprimir reporte del filtro activo", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("heading", { name: "Bit Advisor", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reportes", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await expect(page.locator("article").filter({ hasText: "Avance del periodo" }).getByRole("heading")).toHaveText("12 m");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

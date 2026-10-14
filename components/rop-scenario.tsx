@@ -34,7 +34,7 @@ export function RopScenario({onAttach}:{onAttach?:(assumptions:ScenarioAssumptio
     const rate = predictRop(Number(r1), estimate.betaPerHour, hours);
     return `${50 + index * 12},${160 - rate / Number(r1) * 130}`;
   }).join(" ") : "";
-  return <section className="panel" aria-labelledby="rop-scenario-title">
+  return <section className="panel" style={{padding:24}} aria-labelledby="rop-scenario-title">
     <h3 id="rop-scenario-title">Escenario hipotético de ROP</h3>
     <p>Calculadora didáctica — {ROP_MODEL_VERSION}. Los valores iniciales son un ejemplo, no una calibración del cliente. Usa puntos instantáneos comparables, no promedios de turno.</p>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBlock: 16 }}>

@@ -1,5 +1,6 @@
 import { readFile,writeFile } from "node:fs/promises";
 import crypto from "node:crypto";
+import path from "node:path";
 import bcrypt from "bcryptjs";
 import { Pool } from "pg";
 import { parseOperationalArchive } from "../packages/import/may-2026";
@@ -36,7 +37,8 @@ async function main(){
  const repeat=await commitImport(session,parsed);
  const loaded=await readOperation(session.tenantId);
  if(loaded.shifts.length!==248||Math.abs(loaded.summary.advanceM-2813.25)>1e-8||!repeat.duplicate)throw Error("Reconciliation failed");
- console.log(JSON.stringify({environment:"private-staging",importId:first.id,reimportDuplicate:repeat.duplicate,summary:loaded.summary,crownSnapshots:loaded.crowns.length}));
+ if(secret.owner_password)await writeFile(path.join(path.dirname(secretPath),"drillops-staging-access.json"),JSON.stringify({url:"https://staging.drillops.syntavera.dev",email:secret.owner_email,password:secret.owner_password},null,2),{mode:0o600});
+ console.log(JSON.stringify({environment:"private-staging",importId:first.id,reimportDuplicate:repeat.duplicate,shifts:loaded.shifts.length,advanceM:loaded.summary.advanceM,drillingHours:loaded.summary.drillingHours,ropMPerHour:loaded.summary.ropMPerHour,crownSnapshots:loaded.crowns.length}));
  const {operationalPool}=await import("../lib/operational-db");await operationalPool().end();
 }
 main().catch(()=>{console.error("Private intake failed; inspect scoped diagnostics without exposing credentials");process.exitCode=1;});
