@@ -12,6 +12,15 @@ import {
 } from "./access-control";
 
 describe("permisos y planes definidos por Raúl", () => {
+  it("scopes the review capability without expanding clients or commercial plans", () => {
+    for (const plan of ["Básico", "Intermedio", "Premium"] as const) {
+      for (const section of ["dashboard", "operacion", "turnos", "coronas", "bit-advisor", "reportes", "drill-assistant"] as const) expect(canAccessSection({ role: "operational_reviewer", plan, section })).toBe(true);
+      for (const section of ["importaciones", "configuracion", "facturacion", "tenants", "inventario"] as const) expect(canAccessSection({ role: "operational_reviewer", plan, section })).toBe(false);
+      for (const kind of ["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "supply_stock", "consumable", "report_attachment"] as const) expect(canWriteManualRecord("operational_reviewer", plan, kind)).toBe(false);
+      expect(canAccessSection({ role: "client", plan, section: "bit-advisor" })).toBe(false);
+      expect(canAccessSection({ role: "client", plan, section: "drill-assistant" })).toBe(false);
+    }
+  });
   it("mantiene precios, compromisos y límites reconciliados", () => {
     expect(planCatalog["Básico"]).toMatchObject({ monthlyPriceUsd: 350, minimumMonths: 4, minimumContractUsd: 1_400, machineLimit: 3 });
     expect(planCatalog["Intermedio"]).toMatchObject({ monthlyPriceUsd: 450, minimumMonths: 6, minimumContractUsd: 2_700, machineLimit: 6 });

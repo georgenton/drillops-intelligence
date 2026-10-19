@@ -20,7 +20,7 @@ function fixture() {
   const book = zip({ "xl/workbook.xml": '<workbook xmlns:r="r"><sheets><sheet name="RIG-E2E-001" r:id="rId1"/></sheets></workbook>', "xl/_rels/workbook.xml.rels": '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>', "xl/worksheets/sheet1.xml": sheet });
   return zip({ "synthetic-e2e.xlsx": book });
 }
-async function login(page: Page, name: "supervisor" | "client" | "other") {
+async function login(page: Page, name: "supervisor" | "client" | "other" | "reviewer") {
   await page.goto("/login");
   await page.getByLabel("Correo electrónico").fill(`${name}@drillops-e2e.example.invalid`);
   await page.getByLabel("Contraseña").fill(password);
@@ -112,6 +112,31 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   const denied = await client.request.post("/api/v2/decisions", { headers: { origin }, data: { decision: "accept", crownSerial: "SYN-E2E-001", reason: "Forbidden synthetic action", filters: {} } }); expect(denied.status()).toBe(403);
   const deniedCorrection = await client.request.patch("/api/v2/operation", { headers: { origin }, data: { logicalKey: state.shifts[0].logicalKey, revision: 2, advanceM: 99, drillingHours: 5, reason: "Forbidden synthetic correction" } }); expect(deniedCorrection.status()).toBe(403);
   await clientContext.close();
+  const reviewContext = await browser.newContext({ baseURL }); const reviewer = await reviewContext.newPage();
+  await login(reviewer, "reviewer");
+  const beforeReview = await apiState(reviewer.request);
+  expect(beforeReview.decisions).toHaveLength(1);
+  for (const label of ["Dashboard", "Operación", "Turnos", "Coronas", "Reportes", "Bit Advisor", "Drill Assistant"]) {
+    await reviewer.getByRole("link", { name: label, exact: true }).click();
+    await expect(reviewer.getByRole("heading", { name: label, exact: true })).toBeVisible();
+  }
+  await reviewer.getByLabel("Pregunta operacional").fill("metros");
+  await reviewer.getByRole("button", { name: "Consultar", exact: true }).click();
+  await expect(reviewer.getByRole("status").last()).toHaveText("Avance: 12 m");
+  await reviewer.getByRole("link", { name: "Bit Advisor", exact: true }).click();
+  await reviewer.getByLabel("Horizonte futuro efectivo (h, máximo 168)").fill("4");
+  await expect(reviewer.getByRole("button", { name: "Guardar decisión" })).toBeDisabled();
+  await expect(reviewer.getByRole("button", { name: "Adjuntar este escenario a la decisión" })).toHaveCount(0);
+  expect(await apiState(reviewer.request)).toEqual(beforeReview);
+  for (const decision of ["accept", "reject", "alternative"]) expect((await reviewer.request.post("/api/v2/decisions", { headers: { origin }, data: { decision, crownSerial: "SYN-E2E-001", reason: "Denied review attempt", filters: {} } })).status()).toBe(403);
+  expect((await reviewer.request.patch("/api/v2/operation", { headers: { origin }, data: { logicalKey: state.shifts[0].logicalKey, revision: 2, advanceM: 99, drillingHours: 5, reason: "Denied review correction" } })).status()).toBe(403);
+  expect((await reviewer.request.post("/api/v2/imports?commit=true", { headers: { origin }, data: "denied" })).status()).toBe(403);
+  expect((await reviewer.request.get("/api/v2/operation?tenantId=00000000-0000-4000-8000-000000000e22")).status()).toBe(403);
+  expect(await apiState(reviewer.request)).toEqual(beforeReview);
+  await reviewer.getByRole("button", { name: "Salir", exact: true }).click();
+  await expect(reviewer).toHaveURL(/\/login$/);
+  expect((await reviewer.request.get("/api/v2/operation")).status()).toBe(401);
+  await reviewContext.close();
   const otherContext = await browser.newContext({ baseURL }); const other = await otherContext.newPage();
   await login(other, "other"); expect((await apiState(other.request)).shifts).toHaveLength(0);
   const deniedTenant = await other.request.get(`/api/v2/operation?tenantId=${tenantA}`); expect(deniedTenant.status()).toBe(403);

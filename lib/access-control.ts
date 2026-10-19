@@ -11,7 +11,8 @@ export const canonicalRoles = [
   "control",
 ] as const;
 
-export type AppRole = (typeof canonicalRoles)[number];
+// Derived from a staging-only, explicitly granted membership capability; not a DB role.
+export type AppRole = (typeof canonicalRoles)[number] | "operational_reviewer";
 export type LegacyRole = "tenant_owner" | "admin" | "supervisor" | "operator" | "viewer";
 export type SessionRole = AppRole | LegacyRole;
 
@@ -87,6 +88,7 @@ export const planCatalog: Record<PlanName, PlanDefinition> = {
 };
 
 const roleSections: Record<AppRole, ReadonlySet<AppSection>> = {
+  operational_reviewer: new Set(["dashboard", "operacion", "turnos", "coronas", "bit-advisor", "drill-assistant", "reportes"]),
   platform_admin: new Set(appSections),
   general_manager: new Set(tenantSections),
   client: new Set(["dashboard", "operacion", "sondeos", "taladros", "turnos", "intervalos", "coronas", "survey", "depth-intelligence", "analitica", "reportes"]),
@@ -96,6 +98,7 @@ const roleSections: Record<AppRole, ReadonlySet<AppSection>> = {
 };
 
 const writeKinds: Record<AppRole, ReadonlySet<ManualRecordKind>> = {
+  operational_reviewer: new Set(),
   platform_admin: new Set(["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "supply_stock", "consumable", "report_attachment"]),
   general_manager: new Set(["rig", "drillhole", "shift", "interval", "crown", "inventory_movement", "supply_stock", "consumable", "report_attachment"]),
   client: new Set(),
@@ -105,6 +108,7 @@ const writeKinds: Record<AppRole, ReadonlySet<ManualRecordKind>> = {
 };
 
 const readKinds: Record<AppRole, ReadonlySet<ManualRecordKind>> = {
+  operational_reviewer: new Set(["shift", "crown", "report_attachment"]),
   platform_admin: writeKinds.platform_admin,
   general_manager: writeKinds.general_manager,
   client: new Set(["rig", "drillhole", "shift", "interval", "crown", "report_attachment"]),
@@ -126,6 +130,7 @@ const kindSections: Partial<Record<ManualRecordKind, AppSection>> = {
 };
 
 export const roleLabels: Record<AppRole, string> = {
+  operational_reviewer: "Revisión operacional · sólo lectura",
   platform_admin: "Administración de plataforma",
   general_manager: "Gerente General",
   client: "Cliente",
@@ -135,6 +140,7 @@ export const roleLabels: Record<AppRole, string> = {
 };
 
 export function normalizeRole(role: SessionRole | string): AppRole {
+  if (role === "operational_reviewer") return role;
   const legacy: Record<string, AppRole> = {
     tenant_owner: "general_manager",
     admin: "general_manager",
@@ -142,7 +148,7 @@ export function normalizeRole(role: SessionRole | string): AppRole {
     operator: "driller",
     viewer: "client",
   };
-  return canonicalRoles.includes(role as AppRole) ? role as AppRole : legacy[role] ?? "client";
+  return canonicalRoles.some(value => value === role) ? role as AppRole : legacy[role] ?? "client";
 }
 
 export function isAppSection(value: string): value is AppSection {
@@ -151,6 +157,8 @@ export function isAppSection(value: string): value is AppSection {
 
 export function canAccessSection(input: { role: SessionRole | string; plan: PlanName; section: AppSection; billingEnabled?: boolean }): boolean {
   const role = normalizeRole(input.role);
+  // Narrow review capability, never a change to commercial plan entitlements.
+  if (role === "operational_reviewer") return roleSections[role].has(input.section);
   if (role === "platform_admin") return input.section !== "facturacion" || Boolean(input.billingEnabled);
   if (input.section === "tenants") return false;
   if (input.section === "facturacion" && !input.billingEnabled) return false;

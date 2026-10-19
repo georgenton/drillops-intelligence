@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 const tenants = ["00000000-0000-4000-8000-000000000e21", "00000000-0000-4000-8000-000000000e22"];
 const users = [
+  { id: "00000000-0000-4000-8000-000000000e34", email: "reviewer@drillops-e2e.example.invalid", role: "client", tenant: tenants[0] },
   { id: "00000000-0000-4000-8000-000000000e31", email: "supervisor@drillops-e2e.example.invalid", role: "operations_supervisor", tenant: tenants[0] },
   { id: "00000000-0000-4000-8000-000000000e32", email: "client@drillops-e2e.example.invalid", role: "client", tenant: tenants[0] },
   { id: "00000000-0000-4000-8000-000000000e33", email: "other@drillops-e2e.example.invalid", role: "operations_supervisor", tenant: tenants[1] },
@@ -33,6 +34,7 @@ async function main() {
       await client.query("INSERT INTO users(id,email,name,password_hash) VALUES($1,$2,'Synthetic E2E User',$3) ON CONFLICT(id) DO UPDATE SET password_hash=EXCLUDED.password_hash", [user.id, user.email, hash]);
       await client.query("DELETE FROM memberships WHERE user_id=$1", [user.id]);
       await client.query("INSERT INTO memberships(tenant_id,user_id,role) VALUES($1,$2,$3)", [user.tenant, user.id, user.role]);
+      if (user.email.startsWith("reviewer@")) await client.query(`UPDATE tenants SET settings=jsonb_set(settings,'{operationalReviewMembershipIds}',(SELECT jsonb_build_array(id::text) FROM memberships WHERE user_id=$1)) WHERE id=$2`,[user.id,user.tenant]);
       await client.query("DELETE FROM operational_login_attempts WHERE identity_hash=$1", [createHash("sha256").update(user.email).digest("hex")]);
     }
     await client.query("COMMIT");

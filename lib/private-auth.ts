@@ -16,12 +16,15 @@ export async function privateSession(): Promise<PrivateSession | null> {
   const token = (await cookies()).get("drillops_private_session")?.value;
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const result = await operationalPool().query<PrivateSession>(`
-    SELECT u.id AS "userId", t.id AS "tenantId",u.email,u.name,m.role,
+    SELECT u.id AS "userId", t.id AS "tenantId",u.email,u.name,
+      CASE WHEN $2='staging' AND m.role::text='client'
+        AND COALESCE(t.settings->'operationalReviewMembershipIds','[]'::jsonb) ? m.id::text
+        THEN 'operational_reviewer' ELSE m.role::text END AS role,
       COALESCE(t.settings->>'plan','Premium') AS plan
     FROM operational_sessions s JOIN users u ON u.id=s.user_id
     JOIN memberships m ON m.user_id=u.id AND m.tenant_id=s.tenant_id
     JOIN tenants t ON t.id=m.tenant_id
-    WHERE s.token_hash=$1 AND s.expires_at>now() AND s.revoked_at IS NULL AND t.active=true`, [sessionHash(token)]);
+    WHERE s.token_hash=$1 AND s.expires_at>now() AND s.revoked_at IS NULL AND t.active=true`, [sessionHash(token), process.env.DRILLOPS_ENV ?? ""]);
   return result.rows[0] ?? null;
 }
 export function assertSameOrigin(request: Request) {
