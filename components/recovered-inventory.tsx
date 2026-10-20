@@ -1,5 +1,6 @@
 "use client";
 import { useCallback,useEffect,useState,type FormEvent } from "react";
+import { PackageSearch, ClipboardList, AlertTriangle } from "lucide-react";
 import type { InventorySnapshot } from "@/packages/domain/inventory-ledger";
 export function useInventory(enabled=true){
   const [snapshot,setSnapshot]=useState<InventorySnapshot|null>(null),[error,setError]=useState("");
@@ -19,16 +20,17 @@ export function RecoveredInventory(){
     }catch(error){setMessage(error instanceof Error?error.message:"No se pudo guardar.");}finally{setBusy(false);}
   }
   return <>
+    <div className="inventory-overview"><div><PackageSearch/><section><b>{snapshot?.balances.length||"—"}</b><span>Artículos con saldo confirmado</span></section></div><div><ClipboardList/><section><b>{snapshot?.movements.length??"—"}</b><span>Movimientos recientes · máximo 500</span></section></div><div className="warn"><AlertTriangle/><section><b>—</b><span>Reservas no declaradas</span></section></div></div>
     <section className="panel"><header className="panel-head"><div><h3>Inventario disponible</h3><p>Saldos explícitos por artículo y unidad. Los consumos importados no se convierten automáticamente en stock.</p></div></header>
       {error&&<p role="alert">{error}</p>}
       {!snapshot?<p>Cargando inventario…</p>:!snapshot.balances.length?<p className="source-note">No hay saldos iniciales registrados. Esto significa stock desconocido, no cero.</p>:<div style={{overflowX:"auto"}}><table><thead><tr><th>Código</th><th>Saldo registrado</th><th>Unidad</th></tr></thead><tbody>{snapshot.balances.map(b=><tr key={b.code}><td>{b.code}</td><td>{b.balance}</td><td>{unitLabels[b.unit]}</td></tr>)}</tbody></table></div>}
     </section>
-    {snapshot?.canWrite?<section className="panel" style={{padding:20}}><h3>Registrar movimiento</h3><form onSubmit={save} onChange={()=>setRequestId("")} style={{display:"grid",gap:12,gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))"}}>
+    {snapshot?.canWrite?<section className="panel supplementary-panel" style={{padding:20}}><h3>Registrar movimiento</h3><form className="record-grid" onSubmit={save} onChange={()=>setRequestId("")} style={{display:"grid",gap:12,gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))"}}>
       <label>Código del artículo<input name="code" required maxLength={80} placeholder="Código exacto de corona o insumo"/></label>
       <label>Unidad<select name="unit">{Object.entries(unitLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
       <label>Movimiento<select name="kind"><option value="opening">Saldo inicial explícito</option><option value="in">Entrada</option><option value="out">Salida</option><option value="adjustment">Ajuste: delta +/−</option></select></label>
       <label>Cantidad<input name="quantity" type="number" step="0.001" required/></label><label>Motivo auditable<input name="reason" minLength={5} maxLength={500} required/></label>
-      <button className="button primary" disabled={busy}>{busy?"Guardando…":"Guardar movimiento"}</button>
+      <button className="primary-btn" disabled={busy}>{busy?"Guardando…":"Guardar movimiento"}</button>
     </form><p>La apertura sólo puede registrarse una vez por código. El ajuste suma o resta la cantidad indicada; no reemplaza el saldo. No se permiten saldos negativos.</p></section>:<p className="source-note">Consulta de inventario. Este perfil no modifica saldos.</p>}
     {message&&<p role="status">{message}</p>}
     <section className="panel"><header className="panel-head"><div><h3>Historial de movimientos</h3><p>Últimos 500 movimientos. El saldo incluye todos los registros; cada movimiento conserva actor, fecha y motivo en auditoría.</p></div></header><div style={{overflowX:"auto"}}><table><thead><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Cantidad</th><th>Saldo posterior</th><th>Motivo</th></tr></thead><tbody>{snapshot?.movements.map(m=><tr key={m.id}><td>{new Date(m.createdAt).toLocaleString("es-EC")}</td><td>{m.code}</td><td>{m.kind}</td><td>{m.quantity} {unitLabels[m.unit]}</td><td>{m.balanceAfter}</td><td>{m.reason}</td></tr>)}</tbody></table></div></section>

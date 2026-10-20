@@ -37,11 +37,11 @@ export function QuickOperationRecords({data,session,onSaved}:{data:{shifts:Store
  const set=(key:string,value:string)=>setFields(previous=>({...previous,[key]:value}));
  const numeric=(key:string)=>Number(fields[key]);
  const input=(label:string,key:string,options:{type?:string;min?:number;max?:number;optional?:boolean}={})=><label key={key}>{label}<input type={options.type??"text"} required={!options.optional} step={options.type==="number"?"any":undefined} min={options.min} max={options.max} maxLength={options.type==="number"?undefined:160} value={fields[key]??""} disabled={busy} onChange={e=>set(key,e.target.value)}/></label>;
- return <section className="stack">
-  <div className="toolbar"><div><strong>Registro rápido por turno</strong><p className="helper-text">Detalle complementario: no duplica avance, horas ni inventario.</p></div>
-   <div className="toolbar-actions">{(Object.keys(labels) as QuickRecordKind[]).filter(allowed).map(k=><button key={k} className="button button-secondary" disabled={!data.shifts.length} onClick={()=>{
+ return <section className="panel supplementary-panel">
+  <div><header className="panel-head"><div><h3>Registro rápido por turno</h3><p>Detalle complementario: no duplica avance, horas ni inventario.</p></div></header>
+   <div className="quick-links">{(Object.keys(labels) as QuickRecordKind[]).filter(allowed).map(k=><button key={k} aria-label={`Registrar ${labels[k].toLowerCase()}`} disabled={!data.shifts.length} onClick={()=>{
     const shift=data.shifts[0];setKind(k);setLogicalKey(shift.logicalKey);setRevision(shift.revision);setRequestId(crypto.randomUUID());setFields({});setReason("");setError("");
-   }}>Registrar {labels[k].toLowerCase()}</button>)}</div>
+   }}><span aria-hidden="true" style={{fontSize:20,color:"var(--green)"}}>＋</span><b>Registrar {labels[k].toLowerCase()}</b><span>Detalle observado del turno seleccionado</span></button>)}</div>
   </div>
   {listError&&<p role="alert">{listError}</p>}
   {scoped.length>0&&<div className="table-scroll"><table><caption>Detalles guardados del filtro actual</caption><thead><tr><th>Tipo</th><th>Turno</th><th>Registro</th></tr></thead><tbody>{scoped.map(r=>{
