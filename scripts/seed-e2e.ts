@@ -25,10 +25,12 @@ async function main() {
     await client.query("GRANT USAGE ON SCHEMA public TO drillops_e2e_runtime");
     await client.query("GRANT SELECT ON users,tenants,memberships TO drillops_e2e_runtime");
     await client.query("GRANT SELECT,INSERT,UPDATE ON operational_sessions,operational_login_attempts,operational_imports,operational_shifts,operational_revisions,operational_decisions,operational_reports,operational_report_revisions TO drillops_e2e_runtime");
+    await client.query("GRANT SELECT,INSERT,UPDATE ON operational_catalog,operational_catalog_revisions TO drillops_e2e_runtime");
+    await client.query("GRANT SELECT,INSERT ON operational_inventory_movements,operational_report_attachments,operational_quick_records TO drillops_e2e_runtime");
     for (const tenant of tenants) {
       await client.query("INSERT INTO tenants(id,name,slug,settings) VALUES($1,'Synthetic E2E tenant',$2,$3) ON CONFLICT(id) DO UPDATE SET active=true,settings=EXCLUDED.settings", [tenant, `synthetic-e2e-${tenant}`, JSON.stringify({ plan: "Premium" })]);
       // Reset only these two reserved synthetic tenants on disposable port 5448.
-      for (const table of ["operational_report_revisions", "operational_reports", "operational_decisions", "operational_revisions", "operational_shifts", "operational_imports", "operational_sessions"]) await client.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]);
+      for (const table of ["operational_quick_records","operational_inventory_movements","operational_report_attachments","operational_catalog_revisions","operational_catalog","operational_report_revisions", "operational_reports", "operational_decisions", "operational_revisions", "operational_shifts", "operational_imports", "operational_sessions"]) await client.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]);
     }
     const hash = await bcrypt.hash("Synthetic-E2E-Only-2026!", 10);
     for (const user of users) {

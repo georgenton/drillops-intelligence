@@ -85,7 +85,10 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   await expect(page.getByRole("status").last()).toHaveText("Avance: 12 m");
   await navigate(page,"Bit Advisor");
   await expect(page.getByRole("heading", { name: "Mantener revisión manual" })).toBeVisible();
-  await expect(page.getByLabel("UCS independiente (MPa, opcional)")).toBeVisible();
+  await expect(page.getByLabel("UCS (MPa, opcional)", { exact: true })).toBeVisible();
+  // Keep coverage of the missing-UCS path even though the didactic example now
+  // explicitly supplies a hypothetical 200 MPa, independently tested elsewhere.
+  await page.getByLabel("UCS (MPa, opcional)", { exact: true }).fill("");
   await page.getByRole("button", { name: "Adjuntar este escenario a la decisión", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Escenario adjuntado como hipótesis");
   await page.getByLabel("Corona para decisión").selectOption("SYN-E2E-001");

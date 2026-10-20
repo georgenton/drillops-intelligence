@@ -64,3 +64,58 @@ test("cost hypothesis is explicit, local only and restricted to authorized cost 
     expect((await page.request.delete("/api/auth/login",{headers:{origin}})).status()).toBe(200);
   }
 });
+
+test("visual shift correction persists, shows utilization and refuses stale revisions", async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const rig = `RIG-CORRECTION-${Date.now()}`;
+  await page.request.post("/api/auth/login", { headers: { origin }, data: { email: "supervisor@drillops-e2e.example.invalid", password } });
+  try {
+    const captured = await page.request.post("/api/v2/capture", { headers: { origin }, data: {
+      date: "2026-10-20", rigCode: rig, holeCode: "SYNTHETIC-CORRECTION", shiftType: "day",
+      startDepthM: 100, endDepthM: 112, parameters: {},
+      activities: [{ label: "PERFORACIÓN", hours: 6 }, { label: "Estabilización", hours: 6 }],
+      reason: "Synthetic isolated visual correction",
+    } });
+    expect(captured.status()).toBe(201);
+    const path = `/api/v2/operation?rig=${rig}`;
+    await page.setViewportSize({ width: 1024, height: 1366 });
+    await page.goto(`/turnos?rig=${rig}`);
+    await expect(page.getByRole("meter", { name: "Utilización del turno" })).toHaveAttribute("aria-valuenow", "50");
+    await page.getByRole("button", { name: "Corregir", exact: true }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Avance corregido (m)", { exact: true }).fill("10");
+    await modal.getByLabel("Horas de perforación corregidas (h)", { exact: true }).fill("5");
+    await modal.getByLabel("Motivo de la corrección").fill("Corrección sintética autorizada de prueba");
+    await modal.getByRole("button", { name: "Guardar corrección auditada" }).click();
+    await expect(modal).toHaveCount(0);
+    await page.reload();
+    let state = await (await page.request.get(path)).json();
+    expect(state.shifts[0]).toMatchObject({ advanceM: 10, drillingHours: 5, revision: 2, startDepthM: 100, endDepthM: 112 });
+    await page.getByRole("button", { name: "Corregir", exact: true }).click();
+    await modal.getByLabel("Avance corregido (m)", { exact: true }).fill("8");
+    await modal.getByLabel("Motivo de la corrección").fill("Borrador obsoleto que no debe persistir");
+    expect((await page.request.patch("/api/v2/operation", { headers: { origin }, data: {
+      logicalKey: state.shifts[0].logicalKey, revision: 2, advanceM: 9, drillingHours: 5, reason: "Concurrent synthetic authorized correction",
+    } })).status()).toBe(200);
+    const response = page.waitForResponse(r => r.request().method() === "PATCH" && r.url().endsWith("/api/v2/operation"));
+    await modal.getByRole("button", { name: "Guardar corrección auditada" }).click();
+    expect((await response).status()).toBe(409);
+    await expect(modal.getByText("Otro usuario guardó una revisión más reciente.", { exact: false })).toBeVisible();
+    await modal.getByRole("button", { name: "Recargar versión vigente" }).click();
+    await expect(modal).toHaveCount(0);
+    state = await (await page.request.get(path)).json();
+    expect(state.shifts[0]).toMatchObject({ advanceM: 9, revision: 3 });
+    await page.request.delete("/api/auth/login", { headers: { origin } });
+    await page.request.post("/api/auth/login", { headers: { origin }, data: { email: "reviewer@drillops-e2e.example.invalid", password } });
+    await page.goto(`/turnos?rig=${rig}`);
+    await expect(page.getByRole("button", { name: "Corregir", exact: true })).toHaveCount(0);
+    expect((await page.request.patch("/api/v2/operation", { headers: { origin }, data: {
+      logicalKey: state.shifts[0].logicalKey, revision: 3, advanceM: 8, drillingHours: 5, reason: "Denied reviewer correction",
+    } })).status()).toBe(403);
+    await page.goto("/bit-advisor");
+    await page.getByRole("button", { name: "Información: Coeficientes y horizonte del escenario" }).click();
+    await expect(page.getByRole("region", { name: "Coeficientes y horizonte del escenario" })).toContainText("no desde la inicial");
+    await expect(page.getByRole("combobox", { name: "Procedencia de UCS", exact: true })).toHaveValue("hypothetical");
+    await expect(page.getByLabel("UCS (MPa, opcional)", { exact: true })).toHaveValue("200");
+  } finally { await page.request.delete("/api/auth/login", { headers: { origin } }); }
+});

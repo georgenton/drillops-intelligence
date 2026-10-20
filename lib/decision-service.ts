@@ -4,13 +4,14 @@ import { tenantTransaction } from "./operational-db";
 import { summarize } from "./operational-store";
 import type { PrivateSession } from "./private-auth";
 import type { CrownSnapshot, OperationalShift } from "@/packages/import/types";
-import { MAX_SCENARIO_HOURS, ROP_MODEL_VERSION, scenario as projectScenario, twoPointDecay } from "@/packages/domain/rop-model";
+import { MAX_SCENARIO_HOURS, ROP_MODEL_VERSION, scenario as projectScenario, scenarioCoefficients } from "@/packages/domain/rop-model";
 
 const rate = z.number().finite().min(0.000001).max(1000);
 export const decisionScenarioSchema = z.object({
   r0: rate, r1: rate, elapsed: z.number().finite().min(0.000001).max(10000),
   horizon: z.number().finite().min(0).max(MAX_SCENARIO_HOURS), threshold: rate,
   ucs: z.number().finite().positive().max(2000).nullable(), ucsSource: z.string().trim().max(500).default(""),
+  ucsKind: z.enum(["hypothetical", "independent"]).default("independent"),
 }).strict();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
   const parsed = new Date(`${value}T00:00:00Z`); return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
@@ -25,12 +26,13 @@ export type DecisionInput = z.input<typeof decisionSchema>;
 export function canRecordDecision(session: PrivateSession): boolean {
   return !session.demo && ["platform_admin", "general_manager", "operations_supervisor"].includes(session.role) && canAccessSection({ ...session, section: "bit-advisor" });
 }
-export function computeDecisionScenario(input: z.infer<typeof decisionScenarioSchema>) {
-  const declaredUcs = input.ucs !== null && input.ucsSource ? { valueMpa: input.ucs, source: input.ucsSource, independentlyMeasured: true as const } : null;
-  const coefficients = twoPointDecay(input.r0, input.r1, input.elapsed, declaredUcs);
+export function computeDecisionScenario(untrusted: z.input<typeof decisionScenarioSchema>) {
+  const input = decisionScenarioSchema.parse(untrusted);
+  const declaredUcs = input.ucs !== null && input.ucsSource && input.ucsKind !== "hypothetical";
+  const coefficients = scenarioCoefficients(input.r0, input.r1, input.elapsed, input.ucs, input.ucsSource, input.ucsKind ?? "independent");
   return {
     source: "USER_SUPPLIED_HYPOTHETICAL" as const, modelVersion: ROP_MODEL_VERSION, modelState: "NOT_VALIDATED" as const,
-    assumptions: input, ucsEvidence: declaredUcs ? "USER_DECLARED_INDEPENDENT_SOURCE_NOT_VERIFIED" : "NO_INDEPENDENT_SOURCE",
+    assumptions: input, ucsEvidence: input.ucsKind === "hypothetical" && input.ucs !== null ? "HYPOTHETICAL_NOT_MEASURED" : declaredUcs ? "USER_DECLARED_INDEPENDENT_SOURCE_NOT_VERIFIED" : "NO_INDEPENDENT_SOURCE",
     coefficients, projection: coefficients.betaPerHour >= 0 ? projectScenario({ ropNow: input.r1, beta: coefficients.betaPerHour, horizonHours: input.horizon, threshold: input.threshold }) : null,
     limits: "Instantaneous comparable hypothetical rates; not shift averages, calibrated client coefficients, physical wear, or remaining crown life.",
   };

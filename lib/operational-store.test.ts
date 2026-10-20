@@ -50,11 +50,11 @@ describe("readOperation context", () => {
     expect(mocks.query.mock.calls[0][1]).toEqual(["tenant-A"]);
   });
   it("filters report-grain observations by the same inclusive operational context",async()=>{
-    const reports=[{date:"2026-05-01",rigCode:"RIG-1",holeCode:"HOLE-1"},{date:"2026-05-02",rigCode:"RIG-1",holeCode:"HOLE-1"},{date:"2026-05-01",rigCode:"RIG-2",holeCode:"HOLE-1"},{date:"2026-05-01",rigCode:"RIG-1",holeCode:"HOLE-2"}];
-    mocks.query.mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{present:true}]}).mockResolvedValueOnce({rows:reports.map(payload=>({payload}))});
+    const reports=[{date:"2026-05-01",rigCode:"RIG-1",holeCode:"HOLE-1"},{date:"2026-05-02",rigCode:"RIG-1",holeCode:"HOLE-1"},{date:"2026-05-01",rigCode:"RIG-2",holeCode:"HOLE-1"},{date:"2026-05-01",rigCode:"RIG-1",holeCode:"HOLE-2"}].map(report=>({...report,consumptions:[]}));
+    mocks.query.mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{present:true}]}).mockResolvedValueOnce({rows:reports.map(payload=>({payload}))});
     const result=await readOperation("tenant-A",{from:"2026-05-01",to:"2026-05-01",rig:"RIG-1",hole:"HOLE-1"});
     expect(result.reports).toEqual([reports[0]]);
-    expect(mocks.query.mock.calls[3][1]).toEqual(["tenant-A"]);
+    expect(mocks.query.mock.calls[4][1]).toEqual(["tenant-A"]);
   });
   it("scopes decisions to requested context", async () => {
     mocks.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ id: "matching", payload: { filters: { rig: "RIG-1" } } }, { id: "other", payload: { filters: { rig: "RIG-2" } } }, { id: "unscoped", payload: {} }] });

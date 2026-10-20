@@ -18,6 +18,7 @@ async function main() {
     await admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
     await admin.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
     await admin.query(`GRANT SELECT,INSERT,UPDATE ON operational_imports,operational_shifts,operational_revisions,operational_decisions,operational_reports,operational_report_revisions TO ${role}`);
+    await admin.query(`GRANT SELECT ON operational_quick_records TO ${role}`);
     url.username = role; url.password = password; process.env.DATABASE_URL = url.toString(); process.env.DRILLOPS_ENV = "staging";
     const { operationalPool, tenantTransaction } = await import("../lib/operational-db");
     const { commitImport, correctShift, readOperation } = await import("../lib/operational-store");

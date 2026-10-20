@@ -2,6 +2,9 @@ import { tenantTransaction } from "./operational-db";
 import {readOperationalReports,writeOperationalReports} from "./operational-report-store";
 import type { PrivateSession } from "./private-auth";
 import type { CrownSnapshot, OperationalImport, OperationalShift } from "@/packages/import/types";
+import { observedDepth } from "@/packages/domain/operational-display";
+import {readQuickRecordsWithClient} from "./quick-operation-records";
+import {appendQuickConsumptions} from "@/packages/domain/quick-report-consumptions";
 export type StoredShift = OperationalShift & { revision: number; crowns: CrownSnapshot[] };
 export type OperationalFilters = { from?: string; to?: string; rig?: string; hole?: string };
 export function summarize(shifts: OperationalShift[]) {
@@ -26,8 +29,11 @@ export async function readOperation(tenantId:string, filters:OperationalFilters=
     const snapshots=shifts.flatMap(s=>s.crowns??[]);
     const crowns=[...new Map(snapshots.map(s=>[`${s.date}|${s.key}`,s])).values()];
     const scopedDecisions=decisions.rows.filter(d=>Object.entries(filters).every(([key,value])=>!value||d.payload.filters?.[key]===value));
-    const reports=(await readOperationalReports(client,tenantId)).filter(s=>(!filters.from||s.date>=filters.from)&&(!filters.to||s.date<=filters.to)&&(!filters.rig||s.rigCode===filters.rig)&&(!filters.hole||s.holeCode===filters.hole));
-    return {source:"database" as const,filters,summary:summarize(shifts),shifts,crowns,reports,decisions:scopedDecisions,
+    const shiftKeys=new Set(shifts.map(shift=>shift.logicalKey));
+    const quickRecords=(await readQuickRecordsWithClient(client,tenantId)).filter(record=>shiftKeys.has(record.logicalKey));
+    const reports=appendQuickConsumptions((await readOperationalReports(client,tenantId)).filter(s=>(!filters.from||s.date>=filters.from)&&(!filters.to||s.date<=filters.to)&&(!filters.rig||s.rigCode===filters.rig)&&(!filters.hole||s.holeCode===filters.hole)),shifts,quickRecords);
+    const depthAtCutM=observedDepth(all.filter(s=>(!filters.to||s.date<=filters.to)&&(!filters.rig||s.rigCode===filters.rig)&&(!filters.hole||s.holeCode===filters.hole)));
+    return {source:"database" as const,filters,depthAtCutM,summary:summarize(shifts),shifts,crowns,reports,quickRecords,decisions:scopedDecisions,
       availableRigs:[...new Set(all.map(s=>s.rigCode))],availableHoles:[...new Set(all.map(s=>s.holeCode).filter(Boolean))]};
   });
 }

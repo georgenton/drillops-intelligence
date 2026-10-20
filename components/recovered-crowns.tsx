@@ -1,0 +1,83 @@
+"use client";
+
+import { useState } from "react";
+import { CircleDollarSign, Gauge, PackageSearch, ShieldCheck } from "lucide-react";
+import type { PrivateSession } from "@/lib/private-auth";
+import { canViewOperationalCosts,canAccessSection } from "@/lib/access-control";
+import type { InventoryBalance } from "@/packages/domain/inventory-ledger";
+import { useInventory } from "./recovered-inventory";
+import { reconstructCrownHistory, compareCrownHistory } from "@/packages/domain/crown-history";
+import { mseAnnularMpa } from "@/packages/domain/rop-model";
+import type { CrownCatalogRecord } from "@/packages/domain/operational-catalog";
+import type { PrivateAdvisorProduct } from "@/packages/domain/private-advisor";
+import type { RecoveredData } from "./recovered-operational-views";
+import { useOperationalCatalog } from "./operational-catalog";
+import { RecordModal } from "./record-modal";
+import { FormulaInfo } from "./formula-info";
+import { EChart } from "./echart";
+
+export type CrownViewProps={data:RecoveredData;session:PrivateSession;reload:()=>Promise<void>};
+export const crownFmt=(n:number|null|undefined,d=2)=>n==null?"—":new Intl.NumberFormat("es-EC",{maximumFractionDigits:d}).format(n);
+export function crownProducts(data:RecoveredData,catalog:CrownCatalogRecord[],balances:InventoryBalance[]=[]):PrivateAdvisorProduct[]{
+ const history=reconstructCrownHistory(data.crowns,data.shifts);
+ return catalog.map(c=>{
+  const runs=history.runs.filter(r=>r.serial?.toUpperCase()===c.code),hours=runs.reduce((s,r)=>s+r.attributedHours,0);
+  return {id:c.code,manufacturer:c.manufacturer??"No declarado",product:c.product??c.code,matrix:c.matrix,diameter:c.diameter,price:c.priceUsd??null,
+   historicalRop:hours>0?runs.reduce((s,r)=>s+(r.ropMPerHour??0)*r.attributedHours,0)/hours:null,
+   historicalLife:null,historicalCost:null,stock:balances.find(b=>b.initialized&&b.unit==="units"&&b.code===c.code)?.balance??null,reserved:null,reorder:c.reorderPointUnits,
+   observations:runs.length?runs.reduce((s,r)=>s+r.shiftKeys.length,0):null,hardnessFit:c.hardnessFit,fracturingFit:c.fracturingFit};
+ });
+}
+function Metric({label,value,unit,icon:Icon,sub}:{label:string;value:number|null;unit?:string;icon:typeof Gauge;sub:string}){return <div className="kpi-card"><div className="kpi-icon blue"><Icon/></div><span className="kpi-label">{label}</span><div className="kpi-value">{crownFmt(value)} <small>{unit}</small></div><div className="kpi-sub">{sub}</div></div>;}
+export function CrownHistoryEvidence({data}:Pick<CrownViewProps,"data">){
+ const history=reconstructCrownHistory(data.crowns,data.shifts);
+ return <details className="panel supplementary-panel" style={{padding:18}}><summary>Historial y evidencia · {history.runs.length} corridas · {history.duplicateSnapshots} fotografías repetidas no sumadas</summary><div style={{overflowX:"auto"}}><table><thead><tr><th>Serie / contexto</th><th>Rango reportado</th><th>Metros atribuibles</th><th>ROP pareada</th><th>Cobertura / límites</th></tr></thead><tbody>{history.runs.map(r=><tr key={r.id}><td>{r.serial??"Identidad sin confirmar"}<small className="block">{r.rigCode} · {r.holeCode}</small></td><td>{crownFmt(r.startDepthM)}–{crownFmt(r.endDepthM)} m</td><td>{crownFmt(r.attributedMetresM)} m</td><td>{crownFmt(r.ropMPerHour)} m/h</td><td>{r.shiftKeys.length} turnos · {r.state}<details><summary>Ver evidencia</summary>{r.reasons.join(" · ")}<p>{r.firstObservedDate} — {r.lastObservedDate}</p></details></td></tr>)}</tbody></table></div></details>;
+}
+export function RecoveredCrowns({data,session,reload}:CrownViewProps){
+ const {catalog,error}=useOperationalCatalog(),[all,setAll]=useState(false);
+ const inventory=useInventory(canAccessSection({...session,section:"inventario"}));
+ const history=reconstructCrownHistory(data.crowns,data.shifts),comparison=compareCrownHistory(history);
+ const products=crownProducts(data,catalog?.crowns??[],inventory.snapshot?.balances),showCosts=canViewOperationalCosts(session.role);
+ const weightedHours=history.runs.reduce((s,r)=>s+r.attributedHours,0);
+ const rop=weightedHours>0?history.runs.reduce((s,r)=>s+(r.ropMPerHour??0)*r.attributedHours,0)/weightedHours:null;
+ return <>{error&&<p role="alert">{error}</p>}<div className="kpi-grid four">
+  <Metric label="Corridas observadas" value={history.runs.length} unit="runs" icon={PackageSearch} sub="Reconstrucción conservadora; no cantidad comprada"/>
+  <Metric label="Vida histórica media" value={null} unit="m" icon={ShieldCheck} sub="Falta cierre de vida validado; no incluye corridas abiertas"/>
+  {showCosts&&<Metric label="Costo corona medio" value={null} unit="USD/m" icon={CircleDollarSign} sub="Requiere precio y metros finales de vida confirmados"/>}
+  <Metric label="ROP histórico medio" value={rop} unit="m/h" icon={Gauge} sub="Metros / horas de los mismos turnos atribuibles"/>
+ </div><FormulaInfo title="Indicadores históricos de coronas"><p>La ROP se pondera por horas, no se promedian promedios. Un fin de profundidad reportado no prueba retiro definitivo de la corona. Por eso vida media y costo de vida no se calculan con fotografías abiertas. Los metros atribuibles son cobertura parcial, no vida útil.</p><p>{crownFmt(history.runs.reduce((s,r)=>s+r.attributedMetresM,0))} m atribuibles; {history.uncertainShiftCount} turnos sin atribución única.</p></FormulaInfo>
+ <div className="split-grid"><section className="panel"><header className="panel-head"><div><h3>{showCosts?"Velocidad vs costo":"Velocidad vs vida"}</h3><p>Tamaño uniforme por producto · faltantes no se trazan como cero</p></div></header><EChart className="chart chart-lg" ariaLabel="Comparación original de ROP y costo o vida" option={{tooltip:{trigger:"item"},grid:{left:60,right:30,top:35,bottom:55},xAxis:{type:"value",name:"ROP (m/h)",nameLocation:"middle",nameGap:30,splitLine:{lineStyle:{color:"#253038"}}},yAxis:{type:"value",name:showCosts?"USD / m":"Vida histórica (m)",splitLine:{lineStyle:{color:"#253038"}}},series:[{type:"scatter",symbolSize:30,label:{show:false},emphasis:{label:{show:true,formatter:"{b}"}},data:products.filter(p=>p.historicalRop!==null&&(showCosts?p.historicalCost:p.historicalLife)!==null).map(p=>({name:p.product,value:[p.historicalRop,showCosts?p.historicalCost:p.historicalLife]})),itemStyle:{color:"#56c7ff"}}]}}/><p className="form-hint">Configura precio y referencia en el catálogo. La referencia declarada no sustituye vida histórica cerrada.</p></section>
+ <section className="panel"><header className="panel-head"><div><h3>Comparación transparente</h3><p>ROP pareada y cobertura atribuible; no ranking comercial</p></div></header><div className="crown-ranking">{comparison.slice(0,all?undefined:5).map(r=><div key={`${r.brand}|${r.type}`}><span>◈</span><div><b>{r.brand??"Marca no informada"}</b><small>{r.type??"Tipo no informado"} · {r.runCount} corridas</small></div><dl><dt>ROP</dt><dd>{crownFmt(r.ropMPerHour)} m/h</dd><dt>Atribuibles</dt><dd>{crownFmt(r.attributedMetresM)} m</dd><dt>Vida</dt><dd>Sin cierre validado</dd></dl></div>)}</div>{comparison.length>5&&<button className="button-link" onClick={()=>setAll(!all)}>{all?"Ver cinco":`Ver ${comparison.length} comparaciones`}</button>}</section></div>
+ {inventory.error&&<p role="alert">Saldo de inventario no disponible: {inventory.error}</p>}
+ <section className="panel"><header className="panel-head"><div><h3>Saldo bruto registrado por corona</h3><p>Libro de inventario por código exacto y unidades. No confirma reservas ni disponibilidad neta.</p></div></header><table><thead><tr><th>Código / producto</th><th>Saldo registrado</th><th>Disponible neto</th></tr></thead><tbody>{products.map(p=><tr key={p.id}><td>{p.id} · {p.product}</td><td>{p.stock===null?"Sin saldo confirmado":`${crownFmt(p.stock,0)} unidades`}</td><td>Pendiente de reservas</td></tr>)}</tbody></table></section>
+ <CrownCatalogEditor data={data} session={session} reload={reload}/>
+ <section className="panel table-panel supplementary-panel"><header className="panel-head"><div><h3>{showCosts?"MSE y costo completo por metro":"MSE por corrida"}</h3><p>Medición física explícita · sin convertir PSI en fuerza ni diámetro de testigo en diámetro exterior</p></div></header><table><thead><tr><th>Corona</th><th>MSE</th><th>Medición / evidencia</th>{showCosts&&<th>Costo corona/m</th>}</tr></thead><tbody>{(catalog?.crowns??[]).map(c=>{const m=c.mseCalibration;const result=m?mseAnnularMpa(m):null;return <tr key={c.code}><td>{c.product??c.code}</td><td>{crownFmt(result?.value)} MPa</td><td>{m?<>{m.date} · {m.rigCode} · {m.holeCode} · {m.depthM} m<small className="block">{m.evidence} · {result?.kind}</small></>:"Configurar medición y unidades"}</td>{showCosts&&<td>Requiere cierre de vida</td>}</tr>})}</tbody></table><FormulaInfo title="MSE y costo por metro"><p>MSE = [F/A + T·(2π·RPM/60)/(A·ROP/3600)] / 10⁶, A = π(D²−d²)/4. F en N, T en N·m, diámetros en m y ROP en m/h. La medición superficial produce MSE aparente, no dureza Mohs.</p><p>Costo completo = (costo de corona + horas·tarifa de taladro + consumos valorizados) / metros del mismo alcance. No se usa cero cuando falta un componente ni se reparte un precio de vida completa sobre cobertura parcial.</p></FormulaInfo></section>
+ <CrownHistoryEvidence data={data}/></>;
+}
+export function CrownCatalogEditor({session,reload}:CrownViewProps){
+ const {catalog,refresh}=useOperationalCatalog(),[open,setOpen]=useState(false),[editing,setEditing]=useState<CrownCatalogRecord|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState(""),[measure,setMeasure]=useState(false);
+ const showCosts=canViewOperationalCosts(session.role);
+ return <><section className="panel table-panel supplementary-panel"><header className="panel-head"><div><h3>Catálogo de coronas</h3><p>{catalog?.crowns.length??0} fichas · valores declarados, no catálogo demo</p></div>{catalog?.canWriteCrowns&&<button className="primary-btn" onClick={()=>{setEditing(null);setMeasure(false);setError("");setOpen(true);}}>Nueva corona</button>}</header>{notice&&<p role="status">{notice}</p>}<table><thead><tr><th>Producto</th><th>Matriz</th><th>Diámetro</th>{showCosts&&<th>Compra USD</th>}<th>Vida de referencia</th><th>Acción</th></tr></thead><tbody>{catalog?.crowns.map(c=><tr key={c.code}><td><b>{c.product??c.code}</b><small className="block">{c.manufacturer} · {c.code}</small></td><td>{c.matrix??"—"}</td><td>{c.diameter??"—"}</td>{showCosts&&<td>{crownFmt(c.priceUsd)}</td>}<td>{crownFmt(c.referenceLifeM)} m <small>declarada, no vida histórica</small></td><td>{catalog.canWriteCrowns?<button onClick={()=>{setEditing(c);setMeasure(Boolean(c.mseCalibration));setError("");setOpen(true);}}>Configurar ficha / MSE</button>:"Sólo lectura"}</td></tr>)}</tbody></table></section>
+ <RecordModal open={open} title={editing?"Configurar corona y medición":"Registrar corona"} description="La ficha se guarda con revisión y motivo. La vida de referencia no se presenta como vida histórica observada." submitLabel="Guardar corona" submitting={busy} error={error} onClose={()=>setOpen(false)} onSubmit={async e=>{
+  e.preventDefault();if(!catalog?.canWriteCrowns)return;setBusy(true);setError("");
+  const f=new FormData(e.currentTarget),text=(k:string)=>String(f.get(k)??"").trim(),n=(k:string)=>text(k)===""?null:Number(text(k));
+  const record={code:text("code"),manufacturer:text("manufacturer")||null,product:text("product")||null,matrix:text("matrix")||null,diameter:text("diameter")||null,referenceLifeM:n("referenceLifeM"),reorderPointUnits:n("reorderPointUnits"),hardnessFit:f.getAll("hardnessFit").length?f.getAll("hardnessFit").map(Number):null,fracturingFit:f.getAll("fracturingFit").length?f.getAll("fracturingFit"):null,...(showCosts?{priceUsd:n("priceUsd")}:{}),mseCalibration:measure?{rigCode:text("rigCode"),holeCode:text("holeCode"),depthM:n("depthM"),date:text("date"),wobN:n("wobN"),torqueNm:n("torqueNm"),rpm:n("rpm"),ropMetresPerHour:n("ropMetresPerHour"),outerDiameterM:n("outerDiameterM"),coreDiameterM:n("coreDiameterM"),unitsConfirmed:f.has("unitsConfirmed"),geometryConfirmed:f.has("geometryConfirmed"),measurementLocation:text("measurementLocation"),evidence:text("evidence")}:null};
+  try{const r=await fetch("/api/v2/catalog",{method:editing?.revision?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"crown",record,reason:text("reason"),...(editing?.revision?{revision:editing.revision}:{})})});const body=await r.json();if(!r.ok)throw Error(body.error??"No se guardó la ficha");await refresh();await reload();setNotice("Corona guardada con evidencia y revisión.");setOpen(false);}catch(cause){setError(cause instanceof Error?cause.message:"No se pudo guardar");}finally{setBusy(false);}
+ }}>
+ <div className="record-grid" key={`${editing?.code??"new"}|${open}`}>
+ <label>Código / serie de corona<input name="code" required readOnly={Boolean(editing)} defaultValue={editing?.code}/></label>
+ {(["manufacturer","product","matrix"] as const).map((key,i)=><label key={key}>{["Fabricante","Producto","Matriz"][i]}<input name={key} defaultValue={editing?.[key]??""}/></label>)}
+ <label>Diámetro<select name="diameter" defaultValue={editing?.diameter??""}><option value="">Sin declarar</option><option>HQ</option><option>NQ</option><option>PQ</option></select></label>
+ {showCosts&&<label>Precio compra USD<input name="priceUsd" type="number" min="0" step="any" defaultValue={editing?.priceUsd??""}/></label>}
+ <label>Vida de referencia declarada (m)<input name="referenceLifeM" type="number" min="0" step="any" defaultValue={editing?.referenceLifeM??""}/></label>
+ <label>Reposición (unidades)<input name="reorderPointUnits" type="number" min="0" step="1" defaultValue={editing?.reorderPointUnits??""}/></label>
+ <fieldset><legend>Dureza operacional compatible (1–5; no Mohs)</legend>{[1,2,3,4,5].map(v=><label key={v}><input type="checkbox" name="hardnessFit" value={v} defaultChecked={editing?.hardnessFit?.includes(v)}/>{v}</label>)}</fieldset>
+ <fieldset><legend>Fracturación compatible</legend>{(["low","medium","high"] as const).map((v,i)=><label key={v}><input type="checkbox" name="fracturingFit" value={v} defaultChecked={editing?.fracturingFit?.includes(v)}/>{["Baja","Media","Alta"][i]}</label>)}</fieldset>
+ <label>Incluir medición MSE<input type="checkbox" checked={measure} onChange={e=>setMeasure(e.target.checked)}/></label>
+ {measure&&<><label>Taladro<input name="rigCode" required defaultValue={editing?.mseCalibration?.rigCode}/></label><label>Sondeo<input name="holeCode" required defaultValue={editing?.mseCalibration?.holeCode}/></label><label>Fecha<input name="date" type="date" required defaultValue={editing?.mseCalibration?.date}/></label>
+ {(["depthM","wobN","torqueNm","rpm","ropMetresPerHour","outerDiameterM","coreDiameterM"] as const).map((key,i)=><label key={key}>{["Profundidad (m)","Fuerza axial (N)","Torque (N·m)","RPM","ROP medida (m/h)","Diámetro exterior (m)","Diámetro interior (m)"][i]}<input name={key} type="number" min="0" step="any" required defaultValue={editing?.mseCalibration?.[key]??""}/></label>)}
+ <label>Ubicación de medición<select name="measurementLocation" defaultValue={editing?.mseCalibration?.measurementLocation??"surface"}><option value="surface">Superficie (MSE aparente)</option><option value="downhole">En corona</option></select></label>
+ <label><input type="checkbox" name="unitsConfirmed" required defaultChecked={editing?.mseCalibration?.unitsConfirmed}/>Unidades confirmadas</label><label><input type="checkbox" name="geometryConfirmed" required defaultChecked={editing?.mseCalibration?.geometryConfirmed}/>Geometría confirmada</label><label>Evidencia de medición<input name="evidence" minLength={5} required defaultValue={editing?.mseCalibration?.evidence}/></label></>}
+ <label>Motivo<input name="reason" required minLength={5}/></label>
+ </div></RecordModal></>;
+}

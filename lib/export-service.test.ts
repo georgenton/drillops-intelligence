@@ -4,6 +4,13 @@ import { prepareCapture } from "./capture-service";
 import { exportOperationalXlsx, safeExcelText } from "./export-service";
 import { readZip } from "@/packages/import/zip";
 describe("true XLSX export",()=>{
+  it("retains meter endpoints and distinguishes manually appended evidence from source Excel",async()=>{
+    const {payload,report}=prepareCapture({userId:"s",tenantId:"t",email:"s@example.invalid",name:"Synthetic",role:"operations_supervisor",plan:"Premium"},{date:"2026-10-19",rigCode:"TEST",holeCode:"TEST",shiftType:"day",startDepthM:0,endDepthM:10,activities:[{label:"PERFORACIÓN",hours:12}],parameters:{},consumptions:[{label:"Agua",mode:"readings",start:100,end:125,unit:"m3"}],reason:"Synthetic only"});
+    report.consumptions.push({...report.consumptions[0],key:"quick:synthetic",cells:{},warnings:["Complemento sintético"]});
+    const files=readZip(await exportOperationalXlsx({shifts:[payload],reports:[report],crowns:[]}));
+    const xml=[...files.values()].map(value=>value.toString()).join("");
+    for(const text of ["Lectura inicial","Lectura final","<v>100</v>","<v>125</v>","Registro complementario manual","Complemento sintético"])expect(xml).toContain(text);
+  });
   it("neutralizes formula injection text without changing numeric observations",()=>{
     for(const value of ["=HYPERLINK(1)"," +1","@SUM(A1)","-CMD"])expect(safeExcelText(value)).toBe("'"+value);
     expect(safeExcelText("HQ")).toBe("HQ");

@@ -29,10 +29,10 @@ export function surveyToTrajectory(survey: SurveyPoint[]): TrajectoryPoint[] {
   });
 }
 
-export function Trajectory3D({ survey, holeCode }: { survey: SurveyPoint[]; holeCode: string }) {
+export function Trajectory3D({ survey, holeCode, trajectoryPoints, originLabel, methodLabel }: { survey: SurveyPoint[]; holeCode: string; trajectoryPoints?: TrajectoryPoint[]; originLabel?: string; methodLabel?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rotation, setRotation] = useState(38);
-  const points = useMemo(() => surveyToTrajectory(survey), [survey]);
+  const points = useMemo(() => trajectoryPoints ?? surveyToTrajectory(survey), [survey, trajectoryPoints]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -85,10 +85,10 @@ export function Trajectory3D({ survey, holeCode }: { survey: SurveyPoint[]; hole
       }
       context.fillStyle = "#92a0a7";
       context.font = "10px Inter, sans-serif";
-      context.fillText("COLLAR · 0 m", x(projected[0].px) + 10, y(projected[0].py) - 8);
+      context.fillText(originLabel ?? "COLLAR · 0 m", x(projected[0].px) + 10, y(projected[0].py) - 8);
       const end = projected.at(-1)!;
       context.fillStyle = "#edf2f4";
-      context.fillText(`FONDO · ${end.depth.toFixed(0)} m MD`, Math.min(rect.width - 145, x(end.px) + 10), y(end.py) + 4);
+      context.fillText(`${trajectoryPoints ? "ESTACIÓN" : "FONDO"} · ${end.depth.toFixed(0)} m MD`, Math.min(rect.width - 145, x(end.px) + 10), y(end.py) + 4);
       context.fillStyle = "#718087";
       context.fillText("TVD ↓", 16, padding.top + 12);
       context.fillText("Proyección E–N", rect.width - 130, rect.height - 18);
@@ -97,15 +97,15 @@ export function Trajectory3D({ survey, holeCode }: { survey: SurveyPoint[]; hole
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [points, rotation]);
+  }, [points, rotation, originLabel, trajectoryPoints]);
 
   const end = points.at(-1);
   return <div className="trajectory-3d">
     <div className="trajectory-controls">
-      <div><b>Trayectoria espacial · {holeCode}</b><span>Proyección 3D calculada desde inclinación, azimut y profundidad medida</span></div>
+      <div><b>Trayectoria espacial · {holeCode}</b><span>{methodLabel ?? "Proyección 3D calculada desde inclinación, azimut y profundidad medida"}</span></div>
       <label>Rotación <input aria-label="Rotación de trayectoria" type="range" min="0" max="180" value={rotation} onChange={(event) => setRotation(Number(event.target.value))}/><output>{rotation}°</output></label>
     </div>
     <canvas ref={canvasRef} role="img" aria-label={`Trayectoria tridimensional de ${holeCode}`} />
-    <div className="trajectory-stats"><span>Desplazamiento E <b>{end?.east.toFixed(1) ?? "0.0"} m</b></span><span>Desplazamiento N <b>{end?.north.toFixed(1) ?? "0.0"} m</b></span><span>TVD calculada <b>{end?.tvd.toFixed(1) ?? "0.0"} m</b></span></div>
+    <div className="trajectory-stats"><span>{trajectoryPoints ? "Coordenada E" : "Desplazamiento E"} <b>{end?.east.toFixed(1) ?? "0.0"} m</b></span><span>{trajectoryPoints ? "Coordenada N" : "Desplazamiento N"} <b>{end?.north.toFixed(1) ?? "0.0"} m</b></span><span>TVD calculada <b>{end?.tvd.toFixed(1) ?? "0.0"} m</b></span></div>
   </div>;
 }

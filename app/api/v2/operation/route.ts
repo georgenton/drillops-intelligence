@@ -2,6 +2,7 @@ import { privateSession, assertSameOrigin } from "@/lib/private-auth";
 import { canAccessSection } from "@/lib/access-control";
 import { correctShift, readOperation } from "@/lib/operational-store";
 import { z } from "zod";
+import {redactQuickRecords} from "@/lib/quick-operation-records";
 export async function GET(request:Request) {
   try {
     const session=await privateSession();if(!session)return Response.json({error:"No autorizado"},{status:401});
@@ -12,6 +13,7 @@ export async function GET(request:Request) {
     const crownAccess=canAccessSection({...session,section:"coronas"});
     if(!crownAccess){data.crowns=[];data.shifts=data.shifts.map(s=>({...s,crowns:[]}));}
     if(!canAccessSection({...session,section:"bit-advisor"}))data.decisions=[];
+    data.quickRecords=redactQuickRecords(data.quickRecords,session);
     data.reports=data.reports.map(report=>({...report,
       survey:canAccessSection({...session,section:"survey"})?report.survey:[],
       consumptions:canAccessSection({...session,section:"consumibles"})?report.consumptions:[],

@@ -33,6 +33,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm db:migrate && pnpm db:migrate:operational && pnpm test:integration
+      - run: pnpm exec tsx scripts/test-catalog-integration.ts
+      - run: pnpm exec tsx scripts/test-quick-records-integration.ts
       - run: pnpm build
         env:
           AUTH_SECRET: ci-only-secret
@@ -42,5 +44,8 @@ jobs:
         env:
           DRILLOPS_E2E_START_SERVER: "true"
       - run: pnpm exec playwright test -c playwright.capture.config.ts
+        env:
+          DRILLOPS_E2E_START_SERVER: "true"
+      - run: pnpm exec playwright test -c playwright.recovery.config.ts
         env:
           DRILLOPS_E2E_START_SERVER: "true"

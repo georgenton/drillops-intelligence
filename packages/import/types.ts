@@ -35,4 +35,5 @@ export interface OperationalReport {
   survey: { key: string; depthM: number | null; dip: number | null; azimuth: number | null; reference: string | null; equipment: string | null; valid: boolean; cells: Record<string, SourceCell>; warnings: string[] }[];
   consumptions: ReportMeasurement[]; materials: ReportMeasurement[];
   equipmentHours: ReportMeasurement[]; fluidParameters: ReportMeasurement[];
+  observations?: string | null;
 }
