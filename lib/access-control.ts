@@ -88,7 +88,7 @@ export const planCatalog: Record<PlanName, PlanDefinition> = {
 };
 
 const roleSections: Record<AppRole, ReadonlySet<AppSection>> = {
-  operational_reviewer: new Set(["dashboard", "operacion", "turnos", "coronas", "bit-advisor", "drill-assistant", "reportes"]),
+  operational_reviewer: new Set(["dashboard", "operacion", "sondeos", "taladros", "turnos", "intervalos", "coronas", "bit-advisor", "inventario", "consumibles", "survey", "depth-intelligence", "analitica", "drill-assistant", "reportes"]),
   platform_admin: new Set(appSections),
   general_manager: new Set(tenantSections),
   client: new Set(["dashboard", "operacion", "sondeos", "taladros", "turnos", "intervalos", "coronas", "survey", "depth-intelligence", "analitica", "reportes"]),

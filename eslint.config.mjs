@@ -6,5 +6,5 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   { rules: { "react-hooks/use-memo": "off", "react-hooks/exhaustive-deps": "off" } },
-  globalIgnores([".next/**", "node_modules/**", "packages/db/migrations/**"]),
+  globalIgnores([".next/**", "node_modules/**", "packages/db/migrations/**", "test-results/**", "playwright-report/**"]),
 ]);

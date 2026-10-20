@@ -1,4 +1,5 @@
 import { tenantTransaction } from "./operational-db";
+import {readOperationalReports,writeOperationalReports} from "./operational-report-store";
 import type { PrivateSession } from "./private-auth";
 import type { CrownSnapshot, OperationalImport, OperationalShift } from "@/packages/import/types";
 export type StoredShift = OperationalShift & { revision: number; crowns: CrownSnapshot[] };
@@ -25,7 +26,8 @@ export async function readOperation(tenantId:string, filters:OperationalFilters=
     const snapshots=shifts.flatMap(s=>s.crowns??[]);
     const crowns=[...new Map(snapshots.map(s=>[`${s.date}|${s.key}`,s])).values()];
     const scopedDecisions=decisions.rows.filter(d=>Object.entries(filters).every(([key,value])=>!value||d.payload.filters?.[key]===value));
-    return {source:"database" as const,filters,summary:summarize(shifts),shifts,crowns,decisions:scopedDecisions,
+    const reports=(await readOperationalReports(client,tenantId)).filter(s=>(!filters.from||s.date>=filters.from)&&(!filters.to||s.date<=filters.to)&&(!filters.rig||s.rigCode===filters.rig)&&(!filters.hole||s.holeCode===filters.hole));
+    return {source:"database" as const,filters,summary:summarize(shifts),shifts,crowns,reports,decisions:scopedDecisions,
       availableRigs:[...new Set(all.map(s=>s.rigCode))],availableHoles:[...new Set(all.map(s=>s.holeCode).filter(Boolean))]};
   });
 }
@@ -50,7 +52,8 @@ export async function commitImport(session:PrivateSession, parsed:OperationalImp
         ON CONFLICT(tenant_id,logical_key) DO UPDATE SET payload=EXCLUDED.payload,import_id=EXCLUDED.import_id,revision=operational_shifts.revision+1,updated_at=now()`,[session.tenantId,shift.logicalKey,JSON.stringify(payload),job.rows[0].id]);
       if(old.rows.length) updated++;else inserted++;
     }
-    const result={...parsed.summary,inserted,updated,unchanged};
+    const reportsUpdated=await writeOperationalReports(client,session.tenantId,parsed.operationalReports??[],parsed.adapterVersion,session.userId);
+    const result={...parsed.summary,inserted,updated,unchanged,reportsUpdated};
     await client.query("UPDATE operational_imports SET result=$1 WHERE id=$2 AND tenant_id=$3",[JSON.stringify(result),job.rows[0].id,session.tenantId]);
     return {id:job.rows[0].id,result,duplicate:false};
   });

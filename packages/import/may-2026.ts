@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { operationalSheets, type Sheet } from "./ooxml";
 import { createZipExpansionBudget, readZip } from "./zip";
 import type { OperationalImport, OperationalShift, SourceCell } from "./types";
+import { parseReportDetails } from "./report-details";
 export type { OperationalImport, OperationalShift, CrownSnapshot } from "./types";
-export const ADAPTER_VERSION = "rock-report-1.0.0";
+export const ADAPTER_VERSION = "rock-report-2.0.0";
 const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const normalize = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
 function number(sheet: Sheet, cell: string): number | null { const value = sheet.cells.get(cell)?.value; return typeof value === "number" && Number.isFinite(value) ? value : null; }
@@ -25,6 +26,7 @@ export function parseOperationalArchive(input: Buffer): OperationalImport {
   if (!files.length || files.length > 62) throw new Error("WORKBOOK_COUNT_INVALID");
   const result: OperationalImport = { adapterVersion: ADAPTER_VERSION, archiveSha256: sha(input), shifts: [], crownSnapshots: [], issues: [], summary: { workbooks: files.length, operationalSheets: 0, rigs: 0, holes: 0, shiftPositions: 0, positiveAdvances: 0, advanceM: 0, drillingHoursWithAdvance: 0, ropMPerHour: null, byRig: {} } };
   const logicalKeys = new Set<string>();
+  result.operationalReports = [];
   for (const [path, data] of files.sort(([a], [b]) => a.localeCompare(b))) {
     // Keep only basename: archive folder names may contain private identities.
     const file = path.split("/").at(-1)!, fileSha256 = sha(data);
@@ -37,6 +39,7 @@ export function parseOperationalArchive(input: Buffer): OperationalImport {
       if (!drillingCell || !totalCell) throw new Error(`REPORT_ACTIVITY_LAYOUT_INVALID:${file}:${sheet.name}`);
       const date = dateAt(sheet, dateCell), rigCode = sheet.name;
       const holeCode = string(sheet, `${valueColumn}8`), projectCode = string(sheet, `${valueColumn}5`);
+      result.operationalReports.push(parseReportDetails(sheet,{date,rigCode,holeCode,source:{file,fileSha256,sheet:sheet.name}},wide));
       if (book.externalLinks) result.issues.push({ file, sheet: sheet.name, cell: "", code: "EXTERNAL_LINKS_NOT_REFRESHED", severity: "warning" });
       const namedDate = file.match(/(\d{2})-(\d{2})-(\d{4})/);
       if (namedDate && `${namedDate[3]}-${namedDate[2]}-${namedDate[1]}` !== date) result.issues.push({ file, sheet: sheet.name, cell: dateCell, code: "FILENAME_DATE_MISMATCH", severity: "error" });
@@ -55,7 +58,12 @@ export function parseOperationalArchive(input: Buffer): OperationalImport {
         for (let activityRow = row(drillingCell) - 2; activityRow < row(totalCell); activityRow++) {
           const label = string(sheet, `B${activityRow}`);
           if (!label) continue;
-          const cell = `${hoursColumn}${activityRow}`, hours = number(sheet, cell);
+          // Wide night-hour field F:G precedes chargeability H:L. Select one
+          // numeric anchor; two numbers are ambiguous, never summed or F||G.
+          const candidates = wide && shiftType === "night" ? ["F","G"].map(c=>`${c}${activityRow}`).filter(c=>number(sheet,c)!==null) : [`${hoursColumn}${activityRow}`];
+          const cell = candidates.length===1?candidates[0]:`${hoursColumn}${activityRow}`;
+          const hours = candidates.length>1?null:number(sheet,cell);
+          if(candidates.length>1)warnings.push("ACTIVITY_HOURS_AMBIGUOUS");
           if (hours !== null && (hours < 0 || hours > 12)) warnings.push("ACTIVITY_HOURS_INVALID");
           activities.push({ label, hours: hours !== null && hours >= 0 && hours <= 12 ? hours : null, cell });
         }
@@ -72,6 +80,8 @@ export function parseOperationalArchive(input: Buffer): OperationalImport {
         const pressure = (r: number) => normalize(string(sheet, `${wide ? "AM" : "AL"}${r}`)) === "PSI" ? number(sheet, `${paramColumn}${r}`) : null;
         for (const [key, r, unit] of [["rpm", 15, "rpm"], ["torque", 16, null], ["pulldown", 17, string(sheet, `${wide ? "AM" : "AL"}17`)], ["holdback", 18, string(sheet, `${wide ? "AM" : "AL"}18`)]] as const) cells[key] = source(sheet, `${paramColumn}${r}`, unit);
         result.shifts.push({ logicalKey, date, rigCode, holeCode, projectCode, shiftType, granularity: "shift", startDepthM, endDepthM, advanceM, drillingHours, totalHours, activities, parameters: { rpm: number(sheet, `${paramColumn}15`), torque: number(sheet, `${paramColumn}16`), torqueUnit: null, pulldownPsi: pressure(17), holdbackPsi: pressure(18) }, source: { file, fileSha256, sheet: sheet.name, cells }, warnings });
+        Object.assign(result.shifts.at(-1)!,{diameter:string(sheet,`${wide?"Z":"Y"}${depthRow}`),drillingType:string(sheet,`${wide?"AC":"AB"}${depthRow}`),barrel:string(sheet,`${wide?"AG":"AF"}${depthRow}`),observedDip:number(sheet,`${wide?"T":"S"}${depthRow}`),observedAzimuth:number(sheet,`${wide?"V":"U"}${depthRow}`)});
+        for(const [key,column] of [["diameter",wide?"Z":"Y"],["drillingType",wide?"AC":"AB"],["barrel",wide?"AG":"AF"],["observedDip",wide?"T":"S"],["observedAzimuth",wide?"V":"U"]])cells[key]=source(sheet,`${column}${depthRow}`);
         for (const code of warnings) result.issues.push({ file, sheet: sheet.name, cell: code.includes("HOURS") || code.includes("ACTIVITY") ? hoursCell : advanceCell, code, severity: "warning" });
       }
       const bitColumn = wide ? "P" : "O", bit = locate(sheet, "BIT", bitColumn), shell = locate(sheet, "REAMING SHELL", bitColumn);

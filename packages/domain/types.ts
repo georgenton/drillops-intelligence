@@ -1,4 +1,5 @@
-export type TenantId = "extract" | "minera-a" | "minera-b";
+/** Presentation identifiers include real tenant UUIDs; demo names are not identities. */
+export type TenantId = string;
 export type PlanName = "Básico" | "Intermedio" | "Premium";
 export type Diameter = "PQ" | "HQ" | "NQ";
 export type Priority = "speed" | "cost" | "life" | "balanced";

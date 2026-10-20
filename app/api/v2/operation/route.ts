@@ -12,6 +12,11 @@ export async function GET(request:Request) {
     const crownAccess=canAccessSection({...session,section:"coronas"});
     if(!crownAccess){data.crowns=[];data.shifts=data.shifts.map(s=>({...s,crowns:[]}));}
     if(!canAccessSection({...session,section:"bit-advisor"}))data.decisions=[];
+    data.reports=data.reports.map(report=>({...report,
+      survey:canAccessSection({...session,section:"survey"})?report.survey:[],
+      consumptions:canAccessSection({...session,section:"consumibles"})?report.consumptions:[],
+      materials:canAccessSection({...session,section:"consumibles"})?report.materials:[],
+    }));
     return Response.json(data,{headers:{"Cache-Control":"private, no-store"}});
   }catch{return Response.json({error:"Datos no disponibles. No se utilizan datos de demostración."},{status:503});}
 }

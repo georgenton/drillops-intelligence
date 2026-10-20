@@ -12,8 +12,16 @@ async function main(){
    await client.query(await readFile(new URL("../packages/db/migrations/0003_operational.sql",import.meta.url),"utf8"));
    await client.query("INSERT INTO operational_migrations(version) VALUES('0003')");
   }
+  if(!(await client.query("SELECT 1 FROM operational_migrations WHERE version='0004'")).rowCount){
+   await client.query(await readFile(new URL("../packages/db/migrations/0004_operational_reports.sql",import.meta.url),"utf8"));
+   await client.query("INSERT INTO operational_migrations(version) VALUES('0004')");
+  }
+  if(!(await client.query("SELECT 1 FROM operational_migrations WHERE version='0005'")).rowCount){
+   await client.query(await readFile(new URL("../packages/db/migrations/0005_operational_report_revisions.sql",import.meta.url),"utf8"));
+   await client.query("INSERT INTO operational_migrations(version) VALUES('0005')");
+  }
   await client.query("COMMIT");
-  console.log("Operational migration 0003 applied/verified");
+  console.log("Operational migrations 0003–0005 applied/verified");
  }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();await pool.end();}
 }
 main().catch(()=>{console.error("Operational migration failed (inspect DB privately)");process.exitCode=1;});

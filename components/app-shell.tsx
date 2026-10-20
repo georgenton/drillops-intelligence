@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity, AlertTriangle, Archive, BarChart3, Bell, Bot, Boxes, Building2, CalendarClock,
   ChevronDown, ChevronRight, CheckCircle2, CircleDollarSign, ClipboardCheck, Clock3, Database, Download,
@@ -11,6 +11,8 @@ import {
   TrendingDown, TrendingUp, Upload, Users, Wrench, X, Zap
 } from "lucide-react";
 import type { DemoSession } from "@/lib/auth";
+import type { PrivateSession } from "@/lib/private-auth";
+import { RecoveredOperationalViews, type RecoveredData } from "./recovered-operational-views";
 import { crowns, drillholes, intervals as seedIntervals, rigs, shifts, survey, tenantData, tenants } from "@/lib/demo-data";
 import { getDemoBiDataset } from "@/lib/bi-data";
 import { historicalConsumableWells, holeDiameterMm, initialSupplyStock, previousWellBenchmark, raulMarchConsumableItems, raulMarchRigCosts, raulMonthlyConsumableCosts, raulSourceLabel, rigOperatingSupplies } from "@/lib/raul-data";
@@ -70,37 +72,42 @@ type SupplyStockRecord={id:string;tenantId:TenantId;item:string;quantity:number;
 type ConsumableRecord={id:string;tenantId:TenantId;date:string;type:string;quantity:number;unit:string;cost:number;drillhole:string;rig:string;metresDrilled:number};
 type ReportAttachmentRecord={id:string;tenantId:TenantId;fileName:string;mimeType:"image/jpeg"|"image/png"|"image/webp";dataUrl:string;caption:string;capturedAt:string};
 
-export function AppShell({ section, session, billingEnabled = false }: {section:string;session:DemoSession;billingEnabled?:boolean}) {
+export function AppShell({ section, session, billingEnabled = false, initialData }: {section:string;session:DemoSession|PrivateSession;billingEnabled?:boolean;initialData?:RecoveredData}) {
+  const privateMode="userId" in session;
   const router=useRouter();
+  const activeSearch=useSearchParams();
   const [tenantId,setTenantId]=useState<TenantId>(session.tenantId);
   const [mobile,setMobile]=useState(false);
   const [selectedHole,setSelectedHole]=useState("sec-42d");
   const [topPanel,setTopPanel]=useState<"help"|"notifications"|null>(null);
-  const tenant=tenants.find(t=>t.id===tenantId)!;
+  const tenant=privateMode?{id:session.tenantId,name:(session as PrivateSession & {tenantName?:string}).tenantName??"Operación privada",color:"#d7ff43",plan:session.plan,status:"active"}:tenants.find(t=>t.id===tenantId)!;
   const baseTitle=titles[section]??titles.dashboard;
   const role=normalizeRole(session.role);
-  const canSwitch=role==="platform_admin";
+  const canSwitch=!privateMode&&role==="platform_admin";
   const allowedSections=visibleSections(role,tenant.plan,billingEnabled);
   const sectionAllowed=isAppSection(section)&&canAccessSection({role,plan:tenant.plan,section,billingEnabled});
   const showCosts=canViewOperationalCosts(role);
   const showConsumableCosts=canViewConsumableCosts(role,tenant.plan);
-  const title:[string,string]=showCosts?baseTitle:[baseTitle[0],baseTitle[1].replace(" y costos","").replace(" y costo real por metro","").replace("Consumo y costo","Consumo")];
+  const privateSubtitles:Record<string,string>={dashboard:"Visión operacional del contexto autorizado",operacion:"Últimos reportes registrados de la campaña",sondeos:"Profundidad y avance observados por sondeo",taladros:"Equipos observados y parámetros registrados",turnos:"Producción y actividades por guardia",intervalos:"Rangos de turno · sin subdivisión artificial en 3 m / 1,5 m",coronas:"Historial y atribución conservadora de metros",inventario:"Existencias pendientes de conteo confirmado",consumibles:"Cantidades observadas y unidades originales",survey:"DIP y azimut observados por profundidad",analitica:"Comparativas descriptivas del contexto autorizado",reportes:"Resumen de registros observados para supervisión"};
+  const title:[string,string]=privateMode?[baseTitle[0],privateSubtitles[section]??baseTitle[1]]:showCosts?baseTitle:[baseTitle[0],baseTitle[1].replace(" y costos","").replace(" y costo real por metro","").replace("Consumo y costo","Consumo")];
   const canWrite=(kind:Parameters<typeof canWriteManualRecord>[2])=>canWriteManualRecord(role,tenant.plan,kind);
-  async function logout(){await fetch("/api/auth/demo",{method:"DELETE"});router.push("/login");router.refresh()}
+  async function logout(){const response=await fetch(privateMode?"/api/auth/login":"/api/auth/demo",{method:"DELETE"});if(response.ok){router.push("/login");router.refresh()}}
   return <div className="app-root">
     <aside className={`sidebar ${mobile?"open":""}`}>
       <div className="side-brand"><span className="brand-mark"><Gauge size={20}/></span><span>DRILLOPS <b>INTELLIGENCE</b></span><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div>
       <div className="tenant-chip"><div className="tenant-avatar" style={{background:tenant.color}}>{tenant.name.slice(0,2).toUpperCase()}</div><div><b>{tenant.name}</b><small>{tenant.plan} · {tenant.status==="trial"?"Trial":"Activo"}</small></div>{canSwitch&&<ChevronDown/>}</div>
       {canSwitch&&<select className="tenant-select" aria-label="Cambiar empresa" value={tenantId} onChange={e=>{setTenantId(e.target.value as TenantId);setSelectedHole(drillholes.find(h=>h.tenantId===e.target.value)?.id??"")}}>{tenants.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>}
-      <nav>{menu.filter(([href])=>allowedSections.includes(href)).map(([href,label,Icon])=><Link key={href} className={section===href?"active":""} href={`/${href}`} onClick={()=>setMobile(false)}><Icon size={17}/><span>{label}</span>{href==="bit-advisor"&&<i>AI</i>}</Link>)}</nav>
+      <nav>{menu.filter(([href])=>allowedSections.includes(href)).map(([href,label,Icon])=><Link key={href} className={section===href?"active":""} href={`/${href}${privateMode&&activeSearch.toString()?`?${activeSearch.toString()}`:""}`} onClick={()=>setMobile(false)}><Icon size={17}/><span>{label}</span>{href==="bit-advisor"&&<i>AI</i>}</Link>)}</nav>
       {canSwitch&&<div className="platform-nav"><small>PLATAFORMA</small><Link className={section==="tenants"?"active":""} href="/tenants"><Building2 size={17}/>Empresas</Link></div>}
       <div className="side-user"><div className="user-avatar">{session.name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><b>{session.name}</b><small>{roleLabels[role]}</small></div><button onClick={logout} title="Cerrar sesión"><LogOut size={17}/></button></div>
     </aside>
     {mobile&&<div className="side-overlay" onClick={()=>setMobile(false)}/>}
     <main className="main">
-      <header className="topbar"><button className="mobile-menu" aria-label="Abrir menú" onClick={()=>setMobile(true)}><Menu/></button><div><div className="breadcrumb">Extract Services <ChevronRight size={12}/> {title[0]}</div><h1>{title[0]}</h1><p>{title[1]}</p></div><div className="top-actions"><span className="live"><i/> DATOS AL DÍA</span><button className="icon-btn" aria-label="Abrir ayuda" aria-expanded={topPanel==="help"} onClick={()=>setTopPanel(topPanel==="help"?null:"help")}><HelpCircle/></button><button className="icon-btn notification" aria-label="Abrir notificaciones" aria-expanded={topPanel==="notifications"} onClick={()=>setTopPanel(topPanel==="notifications"?null:"notifications")}><Bell/><i>3</i></button>{topPanel&&<div className="top-popover" role="dialog" aria-label={topPanel==="help"?"Ayuda contextual":"Notificaciones"}><header><div><b>{topPanel==="help"?`Ayuda · ${title[0]}`:"Notificaciones operacionales"}</b><span>{topPanel==="help"?title[1]:"3 señales requieren revisión"}</span></div><button aria-label="Cerrar panel" onClick={()=>setTopPanel(null)}><X/></button></header>{topPanel==="help"?<><p>Usa el menú lateral para cambiar de módulo. Los botones de registro abren formularios y las exportaciones descargan CSV compatible con Excel.</p><div className="popover-links">{allowedSections.includes("operacion")&&<Link href="/operacion" onClick={()=>setTopPanel(null)}>Ir a registro rápido<ChevronRight/></Link>}{allowedSections.includes("drill-assistant")&&<Link href="/drill-assistant" onClick={()=>setTopPanel(null)}>Preguntar al asistente<ChevronRight/></Link>}</div></>:<div className="notification-list">{allowedSections.includes("depth-intelligence")&&<Link href="/depth-intelligence" onClick={()=>setTopPanel(null)}><AlertTriangle/><span><b>Caída de ROP detectada</b><small>Revisa el tramo anómalo por profundidad.</small></span><ChevronRight/></Link>}{allowedSections.includes("inventario")&&<Link href="/inventario" onClick={()=>setTopPanel(null)}><Boxes/><span><b>Stock bajo de coronas</b><small>Hay productos en punto de reposición.</small></span><ChevronRight/></Link>}{allowedSections.includes("turnos")&&<Link href="/turnos" onClick={()=>setTopPanel(null)}><Clock3/><span><b>Validación de turno</b><small>Confirma producción y NPT registrados.</small></span><ChevronRight/></Link>}</div>}</div>}</div></header>
+      <header className="topbar"><button className="mobile-menu" aria-label="Abrir menú" onClick={()=>setMobile(true)}><Menu/></button><div><div className="breadcrumb">{privateMode?tenant.name:"Extract Services"} <ChevronRight size={12}/> {title[0]}</div><h1>{title[0]}</h1><p>{title[1]}</p></div><div className="top-actions"><span className="live"><i/> {privateMode?"CONTEXTO PRIVADO":"DATOS AL DÍA"}</span><button className="icon-btn" aria-label="Abrir ayuda" aria-expanded={topPanel==="help"} onClick={()=>setTopPanel(topPanel==="help"?null:"help")}><HelpCircle/></button><button className="icon-btn notification" aria-label="Abrir notificaciones" aria-expanded={topPanel==="notifications"} onClick={()=>setTopPanel(topPanel==="notifications"?null:"notifications")}><Bell/>{!privateMode&&<i>3</i>}</button>{topPanel&&<div className="top-popover" role="dialog" aria-label={topPanel==="help"?"Ayuda contextual":"Notificaciones"}><header><div><b>{topPanel==="help"?`Ayuda · ${title[0]}`:"Notificaciones operacionales"}</b><span>{topPanel==="help"?title[1]:privateMode?"Consulta las incidencias del contexto en Dashboard":"3 señales requieren revisión"}</span></div><button aria-label="Cerrar panel" onClick={()=>setTopPanel(null)}><X/></button></header>{topPanel==="help"?<><p>Usa el menú lateral para cambiar de módulo. Los botones de registro abren formularios y las exportaciones disponibles descargan datos del contexto autorizado.</p><div className="popover-links">{allowedSections.includes("operacion")&&<Link href="/operacion" onClick={()=>setTopPanel(null)}>Ir a registro rápido<ChevronRight/></Link>}{allowedSections.includes("drill-assistant")&&<Link href="/drill-assistant" onClick={()=>setTopPanel(null)}>Preguntar al asistente<ChevronRight/></Link>}</div></>:<div className="notification-list">{privateMode?<Link href="/dashboard" onClick={()=>setTopPanel(null)}><ShieldCheck/><span><b>Incidencias del contexto</b><small>Consulta las alertas derivadas de registros actuales en Dashboard.</small></span><ChevronRight/></Link>:<>{allowedSections.includes("depth-intelligence")&&<Link href="/depth-intelligence" onClick={()=>setTopPanel(null)}><AlertTriangle/><span><b>Caída de ROP detectada</b><small>Revisa el tramo anómalo por profundidad.</small></span><ChevronRight/></Link>}{allowedSections.includes("inventario")&&<Link href="/inventario" onClick={()=>setTopPanel(null)}><Boxes/><span><b>Stock bajo de coronas</b><small>Hay productos en punto de reposición.</small></span><ChevronRight/></Link>}{allowedSections.includes("turnos")&&<Link href="/turnos" onClick={()=>setTopPanel(null)}><Clock3/><span><b>Validación de turno</b><small>Confirma producción y NPT registrados.</small></span><ChevronRight/></Link>}</>}</div>}</div>}</div></header>
       <div className="page-content">
         {!sectionAllowed&&<AccessRestriction plan={tenant.plan}/>}
+        {sectionAllowed&&privateMode&&<RecoveredOperationalViews section={section} session={session as PrivateSession} initialData={initialData}/>}
+        {!privateMode&&<>
         {sectionAllowed&&section==="dashboard"&&<Dashboard key={tenantId} tenantId={tenantId} selectedHole={selectedHole} setSelectedHole={setSelectedHole} showCosts={showCosts} allowedSections={allowedSections}/>}
         {sectionAllowed&&section==="depth-intelligence"&&<DepthIntelligence tenantId={tenantId} selectedHole={selectedHole}/>}
         {sectionAllowed&&section==="bit-advisor"&&<><BitAdvisor tenantId={tenantId} showCosts={showCosts}/><BhaReadiness/></>}
@@ -120,6 +127,7 @@ export function AppShell({ section, session, billingEnabled = false }: {section:
         {sectionAllowed&&section==="facturacion"&&billingEnabled&&<Billing tenantId={tenantId}/>}
         {sectionAllowed&&section==="configuracion"&&<SettingsScreen/>}
         {sectionAllowed&&section==="tenants"&&<Tenants/>}
+        </>}
       </div>
     </main>
   </div>

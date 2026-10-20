@@ -14,6 +14,7 @@ const session: PrivateSession = { userId: "user-A", tenantId: "tenant-A", email:
 const batch = (): OperationalImport => ({ adapterVersion: "synthetic-v1", archiveSha256: "synthetic-sha", shifts: [shift()], crownSnapshots: [], issues: [], summary: { workbooks: 1, operationalSheets: 1, rigs: 1, holes: 1, shiftPositions: 1, positiveAdvances: 1, advanceM: 10, drillingHoursWithAdvance: 5, ropMPerHour: 2, byRig: {} } });
 beforeEach(() => {
   mocks.query.mockReset(); mocks.transaction.mockReset();
+  mocks.query.mockResolvedValue({rows:[{present:false}]});
   mocks.transaction.mockImplementation(async (_tenant: string, work: (client: PoolClient) => Promise<unknown>) => work({ query: mocks.query } as unknown as PoolClient));
 });
 describe("operational summary coverage", () => {
@@ -47,6 +48,13 @@ describe("readOperation context", () => {
     expect(result.source).toBe("database"); expect(result.availableRigs).toContain("RIG-OTHER");
     expect(mocks.transaction).toHaveBeenCalledWith("tenant-A", expect.any(Function));
     expect(mocks.query.mock.calls[0][1]).toEqual(["tenant-A"]);
+  });
+  it("filters report-grain observations by the same inclusive operational context",async()=>{
+    const reports=[{date:"2026-05-01",rigCode:"RIG-1",holeCode:"HOLE-1"},{date:"2026-05-02",rigCode:"RIG-1",holeCode:"HOLE-1"},{date:"2026-05-01",rigCode:"RIG-2",holeCode:"HOLE-1"},{date:"2026-05-01",rigCode:"RIG-1",holeCode:"HOLE-2"}];
+    mocks.query.mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{present:true}]}).mockResolvedValueOnce({rows:reports.map(payload=>({payload}))});
+    const result=await readOperation("tenant-A",{from:"2026-05-01",to:"2026-05-01",rig:"RIG-1",hole:"HOLE-1"});
+    expect(result.reports).toEqual([reports[0]]);
+    expect(mocks.query.mock.calls[3][1]).toEqual(["tenant-A"]);
   });
   it("scopes decisions to requested context", async () => {
     mocks.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ id: "matching", payload: { filters: { rig: "RIG-1" } } }, { id: "other", payload: { filters: { rig: "RIG-2" } } }, { id: "unscoped", payload: {} }] });
