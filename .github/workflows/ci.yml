@@ -49,3 +49,6 @@ jobs:
       - run: pnpm exec playwright test -c playwright.recovery.config.ts
         env:
           DRILLOPS_E2E_START_SERVER: "true"
+      - run: pnpm exec playwright test -c playwright.review.config.ts
+        env:
+          DRILLOPS_E2E_START_SERVER: "true"

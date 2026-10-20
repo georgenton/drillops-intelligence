@@ -9,9 +9,11 @@ import { RecordModal } from "./record-modal";
 import { observedDepth } from "@/packages/domain/operational-display";
 import type { PrivateSession } from "@/lib/private-auth";
 import { canAccessSection } from "@/lib/access-control";
+import { useReviewScenario } from "./review-scenario";
 
 const CatalogContext = createContext<{ catalog: OperationalCatalog | null; error: string; refresh: () => Promise<void> }>({catalog:null,error:"",refresh:async()=>{}});
 export function OperationalCatalogProvider({ children }: { children: ReactNode }) {
+  const review=useReviewScenario();
   const [catalog,setCatalog]=useState<OperationalCatalog|null>(null);
   const [error,setError]=useState("");
   const refresh=useCallback(async()=>{
@@ -23,12 +25,14 @@ export function OperationalCatalogProvider({ children }: { children: ReactNode }
     if(!r.ok)throw Error("No se pudo consultar el catálogo autorizado.");
     return r.json() as Promise<OperationalCatalog>;
   }).then(value=>{if(active)setCatalog(value);}).catch(cause=>{if(active)setError(cause.message);});return()=>{active=false;};},[]);
-  return <CatalogContext.Provider value={{catalog,error,refresh}}>{children}</CatalogContext.Provider>;
+  const displayed=review.enabled?{...review.scenario!.catalog,canWriteRigs:false,canWriteHoles:false,canWriteCrowns:false,canConfigureCosts:false}:catalog;
+  return <CatalogContext.Provider value={{catalog:displayed,error,refresh}}>{children}</CatalogContext.Provider>;
 }
 export const useOperationalCatalog=()=>useContext(CatalogContext);
 const fmt=(n:number|null|undefined)=>n==null?"—":new Intl.NumberFormat("es-EC",{maximumFractionDigits:2}).format(n);
 
 export function OperationalCatalogView({kind,data,session}:{kind:"rig"|"hole";data:RecoveredData;session?:PrivateSession}) {
+  const review=useReviewScenario();
   const {catalog,error,refresh}=useOperationalCatalog();
   const [editing,setEditing]=useState<RigCatalogRecord|HoleCatalogRecord|null>(null);
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[failure,setFailure]=useState("");
@@ -51,7 +55,7 @@ export function OperationalCatalogView({kind,data,session}:{kind:"rig"|"hole";da
       const depth=hole?observedDepth(rows):null;
       const percent=hole?.targetDepthM&&depth!==null?depth/hole.targetDepthM*100:null;
       return <article className={hole?"hole-card":"rig-card"} key={`${entry.code}|${hole?.rigCode??""}`}>
-        <header><div><span className="status">{entry.source==="configured"?"CONFIGURADO":"OBSERVADO EN REPORTES"}</span><h3>{entry.code}</h3><p>{rig?[rig.name,rig.model].filter(Boolean).join(" · ")||"Identificación por completar":hole?.rigCode}</p></div>{hole?<Target/>:<Wrench/>}</header>
+        <header><div><span className="status">{review.enabled&&entry.revision===0?"REFERENCIA DE REVISIÓN":entry.source==="configured"?"CONFIGURADO":"OBSERVADO EN REPORTES"}</span><h3>{entry.code}</h3><p>{rig?[rig.name,rig.model].filter(Boolean).join(" · ")||"Identificación por código de reporte":hole?.rigCode}</p></div>{hole?<Target/>:<Wrench/>}</header>
         {hole&&<div className="hole-depth"><div><span style={{width:`${Math.min(100,percent??0)}%`}}/></div><b>{fmt(depth)} m</b><small> / {fmt(hole.targetDepthM)} m objetivo · {fmt(percent)}%</small></div>}
         <dl><dt>Estado declarado</dt><dd>{entry.status??"No declarado"}</dd>
           {hole?<><dt>Meta por guardia</dt><dd>{fmt(hole.plannedMetersPerShift)} m</dd><dt>Guardias por día</dt><dd>{hole.guardsPerDay??"No declaradas"}</dd><dt>Inicio de programación</dt><dd>{hole.planStartDate??"No declarado"}</dd></>:<>

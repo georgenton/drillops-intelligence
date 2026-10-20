@@ -5,8 +5,10 @@ import { RecordModal, RecordNotice } from "./record-modal";
 import { canAccessSection, canWriteManualRecord } from "@/lib/access-control";
 import type { PrivateSession } from "@/lib/private-auth";
 import { CaptureMeasurements, type CaptureMeasurement } from "./capture-measurements";
+import {useReviewScenario} from "./review-scenario";
 
 export function PrivateRecordActions({section,session,onSaved,filters={}}:{section:string;session:PrivateSession;onSaved:()=>void;filters?:{from?:string;to?:string;rig?:string;hole?:string}}){
+  const review=useReviewScenario();
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[notice,setNotice]=useState("");
   const [activities,setActivities]=useState([{label:"PERFORACIÓN",hours:""}]);
   const [consumptions,setConsumptions]=useState([{label:"",value:"",unit:"",mode:"direct",start:"",end:""}]);
@@ -31,7 +33,7 @@ export function PrivateRecordActions({section,session,onSaved,filters={}}:{secti
   }
   const query=new URLSearchParams(Object.entries(filters).filter((entry):entry is [string,string]=>Boolean(entry[1]))).toString();
   return <><div className="actionbar">
-    {canExport&&<a className="secondary-btn" href={`/api/v2/export?${query}`} download><Download size={18}/> Exportar XLSX</a>}
+    {canExport&&<a className="secondary-btn" href={`/api/v2/export?${query}${review.enabled?"&review=1":""}`} download><Download size={18}/> Exportar XLSX</a>}
     {canWrite&&captureSections.includes(section)&&<button className="primary-btn" onClick={()=>{setOpen(true);setError(null);}}><Plus size={18}/> Nuevo turno online</button>}
   </div>{notice&&<RecordNotice>{notice}</RecordNotice>}
   <RecordModal open={open} title="Registrar turno operacional" description="Captura online de una guardia nueva. No modifica turnos importados. Las actividades deben sumar 12 h; lo no perforado no se clasifica automáticamente como NPT." submitLabel="Guardar turno" submitting={busy} error={error} onClose={()=>setOpen(false)} onSubmit={submit}>
