@@ -17,11 +17,11 @@ export function reviewCsv(scenario:ReviewScenario){
 }
 export function reviewHtml(scenario:ReviewScenario){
  const rows=scenario.manifest as unknown as Record<string,unknown>[];
- const primary=rows.filter(r=>r.kind!=="EXCEL"&&!String(r.field).startsWith("survey."));
+ const primary=rows.filter(r=>r.kind!=="EXCEL"&&!String(r.field).startsWith("survey.")&&!String(r.id).startsWith("consumption:"));
  const surveyRows=rows.filter(r=>String(r.field).startsWith("survey."));
  const contexts=[...new Set(primary.map(r=>String(r.context)))];
  const sourceLabel=(value:unknown):string=>{
-  if(Array.isArray(value))return [...new Set(value.map(sourceLabel))].join("; ");
+  if(Array.isArray(value)){const labels=[...new Set(value.map(sourceLabel))];return labels.length>3?`${value.length} referencias de origen. Primera: ${labels[0]}; última: ${labels.at(-1)}. Lista completa vinculada a esta entrada en JSON/CSV.`:labels.join("; ");}
   if(value&&typeof value==="object"){
    const v=value as Record<string,unknown>;
    if(v.source)return sourceLabel(v.source);
@@ -29,7 +29,10 @@ export function reviewHtml(scenario:ReviewScenario){
   }
   return typeof value==="string"?value:"Entradas del registro completo JSON/CSV";
  };
- const compact=(value:unknown)=>escape(typeof value==="object"?JSON.stringify(value):value);
+ const compact=(value:unknown)=>{
+  if(Array.isArray(value)&&JSON.stringify(value).length>650)return `${value.length} registros. Inicio: ${escape(JSON.stringify(value.slice(0,2)))}. Final: ${escape(JSON.stringify(value.at(-1)))}. Serie completa exacta en JSON/CSV, bajo el mismo campo.`;
+  return escape(typeof value==="object"?JSON.stringify(value):value);
+ };
  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>DrillOps — datos de los reportes y supuestos para revisar</title><style>
  body{font:15px/1.55 Arial,sans-serif;background:#f2f5f5;color:#18313b;margin:0}main{max-width:1050px;margin:auto;padding:36px}
  header{border-top:6px solid #b9dc32;padding:24px;background:#102129;color:white}h1{font-size:29px;line-height:1.2}h2{font-size:20px}
@@ -46,6 +49,7 @@ export function reviewHtml(scenario:ReviewScenario){
  <h2>Cobertura y originales conservados</h2><p>${rows.filter(r=>r.kind==="EXCEL").length} registros de campos observados; ${rows.filter(r=>r.kind==="SUPUESTO").length} supuestos; ${rows.filter(r=>r.kind==="SINTETICO").length} ejemplos; ${rows.filter(r=>r.kind==="DERIVADO").length} cálculos. Son registros del manifiesto, no turnos adicionales.</p>
  <p>Consumos: ${scenario.consumptionEntries.filter(r=>r.kind==="EXCEL").length} de ${scenario.consumptionEntries.length} lecturas originales (${scenario.consumptionEntries.length?(100*scenario.consumptionEntries.filter(r=>r.kind==="EXCEL").length/scenario.consumptionEntries.length).toFixed(1):0}%); el resto es complemento del escenario, sin corregir el archivo.</p>
  ${contexts.map(context=>`<article><h2>${escape(context)}</h2><table><thead><tr><th style="width:22%">Campo / pantalla</th><th style="width:25%">Valor exacto / unidad / clase</th><th>Origen, cálculo y confirmación</th></tr></thead><tbody>${primary.filter(r=>String(r.context)===context).map(row=>`<tr><td>${escape(fieldLabel(row.field))}<br/><small>${escape(row.screen)}</small></td><td>${compact(row.value)} ${escape(row.unit??"")}<br/><span class="kind">${escape(row.kind)}</span><br/>Original: ${compact(row.original)}</td><td>${escape(row.formula??"")}<br/>${escape(row.reason)}<br/>Fuente: ${escape(sourceLabel(row.source))}<br/>${escape(row.confirm)}</td></tr>`).join("")}</tbody></table><p>☐ Coincide &nbsp; ☐ No coincide &nbsp; ☐ No pude verificar · Observación: ____________________</p></article>`).join("")}
+ <h2>Consumos complementados: valores exactos</h2><p>Se utiliza la mediana del mismo equipo, concepto y unidad. Si no existen comparables, se muestra un ejemplo sintético explícito. Las filas de apoyo y sus celdas están enlazadas por ID en el registro completo. Raúl debe confirmar cada cantidad y unidad antes de sustituir una lectura original.</p><table><thead><tr><th>Fecha / equipo / sondeo</th><th>Concepto / unidad</th><th>Original → revisión</th><th>Clase / fuente</th></tr></thead><tbody>${scenario.consumptionEntries.filter(r=>r.kind!=="EXCEL").map(r=>`<tr><td>${escape(r.context.date)} · ${escape(r.context.rig)} · ${escape(r.context.hole)} · ${escape(r.context.shift??"reporte")}</td><td>${escape(r.field)} (${escape(r.unit)})</td><td>${compact(r.original)} → ${compact(r.value)}</td><td>${escape(r.kind)}<br/>${escape(sourceLabel(r.source))}</td></tr>`).join("")}</tbody></table><p>☐ Coincide &nbsp; ☐ No coincide &nbsp; ☐ No pude verificar · Observación: ____________________</p>
  <h2>Survey: configuración y reconstrucción exacta</h2>${scenario.surveys.map(s=>`<article><h2>${escape(s.context)}</h2><p>${escape(s.reason)} ${escape(s.confirm)}</p><p>${s.acceptedCount} estaciones utilizadas de ${s.sourceCount}; cobertura ${s.coveragePercent}%. ${escape(s.classification)}.</p><p>Configuración: ${compact(s.configuration)}</p><table><thead><tr><th>MD (m)</th><th>DIP (°)</th><th>Azimut (°)</th><th>E / N / TVD relativos (m)</th></tr></thead><tbody>${s.stations.map((station,i)=>`<tr><td>${station.depthM}</td><td>${station.dip}</td><td>${station.azimuth}</td><td>${compact(s.points[i])}</td></tr>`).join("")}</tbody></table><p>☐ Coincide &nbsp; ☐ No coincide &nbsp; ☐ No pude verificar · Observación: ____________________</p></article>`).join("")}
  <details class="no-print"><summary>Consultar los campos originales y el detalle completo de selección Survey</summary>${[...rows.filter(r=>r.kind==="EXCEL"),...surveyRows].map(row=>`<article><h2>${escape(row.context)} · ${escape(fieldLabel(row.field))}</h2><p>${compact(row.value)}</p><p>${escape(sourceLabel(row.source))}</p></article>`).join("")}</details>
  <footer>Generado desde el mismo manifiesto del escenario activo. Los reportes originales permanecen separados. Ni la publicación ni las pruebas técnicas representan aceptación operacional.</footer></main></body></html>`;

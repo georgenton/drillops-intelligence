@@ -12,8 +12,12 @@ const browser=await chromium.launch();
 const context=await browser.newContext({baseURL:base,viewport:{width:1440,height:1000}});
 const outcomes=[];
 try{
- const login=await context.request.post("/api/auth/login",{headers:{origin:base},data:{email:access.email,password:access.password}});
- assert.equal(login.status(),200,"Individual reviewer login");
+ const loginPage=await context.newPage();
+ await loginPage.goto("/login");await loginPage.waitForLoadState("networkidle");
+ await loginPage.getByLabel("Correo electrónico",{exact:true}).fill(access.email);
+ await loginPage.getByLabel("Contraseña",{exact:true}).fill(access.password);
+ await loginPage.getByRole("button",{name:"Ingresar",exact:true}).click();
+ await loginPage.waitForURL("**/dashboard");await loginPage.close();
  const before=await(await context.request.get("/api/v2/operation")).json();
  assert.equal(before.summary.shiftCount,248);assert.ok(Math.abs(before.summary.advanceM-2813.25)<1e-8);assert.equal(before.summary.drillingHours,1280);
  const response=await context.request.get("/api/v2/review-scenario");assert.equal(response.status(),200);
