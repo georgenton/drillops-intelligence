@@ -43,7 +43,40 @@ try{
    for(const button of await writes.all())assert.equal(await button.isEnabled(),false,`${section}: write denied`);
    const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+2);
    assert.equal(overflow,false,`${section}: horizontal overflow ${width}`);
+   if(section==="coronas"){
+    const chart=page.getByRole("img",{name:/^ROP histórica por corona:/});
+    const verifyComparison=async()=>{
+     const rows=await page.locator(".crown-ranking>div").evaluateAll(els=>els.map(el=>({brand:el.querySelector("b").textContent,type:el.querySelector("small").textContent.split(" · ")[0],rop:el.querySelector("dd").textContent})));
+     assert.ok(rows.length>0);
+     assert.equal(await chart.getAttribute("aria-label"),`ROP histórica por corona: ${rows.map(r=>`${r.brand} · ${r.type}: ${r.rop}`).join("; ")}`);
+     const panel=chart.locator("xpath=ancestor::section[1]");
+     assert.doesNotMatch(await panel.innerText(),/sintétic|simulad|catálogo didáctico/i);
+     await chart.locator("canvas").first().waitFor();
+     assert.ok(await chart.locator("canvas").first().evaluate(el=>el.getContext("2d").getImageData(0,0,el.width,el.height).data.some((v,i)=>i%4===3&&v>0)));
+     return rows;
+    };
+    const rows=await verifyComparison();
+    const expand=page.getByRole("button",{name:/^Ver \d+ comparaciones$/});
+    if(await expand.count()){await expand.click();await verifyComparison();await page.getByRole("button",{name:"Ver cinco",exact:true}).click();await verifyComparison();}
+    outcomes.push({section,width,comparison:rows,chartMatchesTable:true});
+   }
+   if(section==="intervalos"||section==="depth-intelligence"){
+    assert.doesNotMatch(await page.locator("main").innerText(),/MSE sin familia|unsupported_family|missing_or_nonfinite_input|invalid_input|nonfinite_result|Familia desconocida/i);
+    const valid=page.getByRole("button",{name:/^Información: MSE (HQ|NQ) · cálculo y fuente$/});
+    assert.ok(await valid.count()>0);
+    await valid.first().click();
+    assert.match(await page.locator("main").innerText(),/Pulldown/);
+    await valid.first().click();
+    if(section==="intervalos"){
+     const cells=page.locator(".table-panel tbody tr td:nth-child(7)");
+     let unavailable=0;
+     for(const cell of await cells.all())if((await cell.innerText()).trim()==="—"){unavailable++;assert.equal(await cell.locator("button").count(),0);}
+     outcomes.push({section,width,unavailableCells:unavailable,invalidDetailsHidden:true});
+    }
+   }
+   await page.evaluate(()=>window.scrollTo(0,0));
    await page.screenshot({path:path.join(root,`${section}-${width}.png`),fullPage:true});
+   if(section==="coronas")await page.locator(".split-grid").first().screenshot({path:path.join(root,`comparacion-coronas-${width}.png`)});
    const essential={dashboard:".planning-grid",survey:".survey-visual","bit-advisor":".advisor-layout","depth-intelligence":".depth-layout"}[section];
    if(width===1440&&essential)await page.locator(essential).screenshot({path:path.join(root,`detalle-${section}.png`)});
    if(section==="depth-intelligence"){await page.locator(".depth-chart-panel").evaluate(el=>{el.scrollLeft=el.scrollWidth;});await page.locator(".depth-layout").screenshot({path:path.join(root,`depth-mse-${width}.png`)});}

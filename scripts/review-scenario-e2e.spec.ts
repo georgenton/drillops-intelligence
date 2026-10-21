@@ -39,6 +39,11 @@ test("read-only review scenario is deterministic, populated, exportable and tena
   await page.goto("/intervalos");await expect(page.getByRole("heading",{name:/MSE experimental · misma muestra/})).toBeVisible();
   await page.goto("/depth-intelligence");await expect(page.getByRole("heading",{name:/MSE HQ\/NQ · entradas/})).toBeVisible();
   await page.goto("/coronas");await expect(page.getByText("Comparación transparente",{exact:true})).toBeVisible();
+  const historicalChart=page.getByRole("img",{name:/^ROP histórica por corona:/});
+  await expect(historicalChart.locator("canvas")).toBeVisible();
+  const comparison=await page.locator(".crown-ranking>div").evaluateAll(rows=>rows.map(row=>`${row.querySelector("b")!.textContent} · ${row.querySelector("small")!.textContent!.split(" · ")[0]}: ${row.querySelector("dd")!.textContent}`));
+  await expect(historicalChart).toHaveAttribute("aria-label",`ROP histórica por corona: ${comparison.join("; ")}`);
+  await expect(historicalChart.locator("xpath=ancestor::section[1]")).not.toContainText(/sintétic|simulad|catálogo didáctico/i);
   await page.goto("/bit-advisor");
   await expect(page.locator(".recommend-card")).toHaveCount(3);
   for(let i=0;i<3;i++){
