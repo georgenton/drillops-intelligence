@@ -31,7 +31,7 @@ export function reviewHtml(scenario:ReviewScenario){
   return typeof value==="string"?value:"Entradas del registro completo JSON/CSV";
  };
  const compact=(value:unknown)=>{
-  if(Array.isArray(value)&&JSON.stringify(value).length>650)return `${value.length} registros. Inicio: ${escape(JSON.stringify(value.slice(0,2)))}. Final: ${escape(JSON.stringify(value.at(-1)))}. Serie completa exacta en JSON/CSV, bajo el mismo campo.`;
+  if(value&&typeof value==="object"&&JSON.stringify(value).length>650)return `${Array.isArray(value)?`${value.length} registros`:"Objeto con campos: "+Object.keys(value).join(", ")}. Detalle íntegro en JSON/CSV bajo este mismo campo y contexto. Este resumen no sustituye las cifras del registro.`;
   return escape(typeof value==="object"?JSON.stringify(value):value);
  };
  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>DrillOps — datos de los reportes y supuestos para revisar</title><style>
