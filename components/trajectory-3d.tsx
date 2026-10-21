@@ -9,6 +9,11 @@ export interface TrajectoryPoint extends SurveyPoint {
   tvd: number;
 }
 
+export function circularMidpointDegrees(a:number,b:number){
+  const delta=((b-a+540)%360)-180;
+  return ((a+delta/2)%360+360)%360;
+}
+
 export function surveyToTrajectory(survey: SurveyPoint[]): TrajectoryPoint[] {
   if (!survey.length) return [];
   let east = 0;
@@ -19,7 +24,7 @@ export function surveyToTrajectory(survey: SurveyPoint[]): TrajectoryPoint[] {
       const previous = survey[index - 1];
       const delta = Math.max(0, point.depth - previous.depth);
       const inclination = Math.abs((point.inclination + previous.inclination) / 2) * Math.PI / 180;
-      const azimuth = ((point.azimuth + previous.azimuth) / 2) * Math.PI / 180;
+      const azimuth = circularMidpointDegrees(previous.azimuth,point.azimuth) * Math.PI / 180;
       const horizontal = delta * Math.sin(inclination);
       tvd += delta * Math.cos(inclination);
       east += horizontal * Math.sin(azimuth);
@@ -29,10 +34,10 @@ export function surveyToTrajectory(survey: SurveyPoint[]): TrajectoryPoint[] {
   });
 }
 
-export function Trajectory3D({ survey, holeCode }: { survey: SurveyPoint[]; holeCode: string }) {
+export function Trajectory3D({ survey, holeCode, trajectoryPoints, originLabel, methodLabel }: { survey: SurveyPoint[]; holeCode: string; trajectoryPoints?: TrajectoryPoint[]; originLabel?: string; methodLabel?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rotation, setRotation] = useState(38);
-  const points = useMemo(() => surveyToTrajectory(survey), [survey]);
+  const points = useMemo(() => trajectoryPoints ?? surveyToTrajectory(survey), [survey, trajectoryPoints]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -62,10 +67,22 @@ export function Trajectory3D({ survey, holeCode }: { survey: SurveyPoint[]; hole
 
       context.strokeStyle = "rgba(121,140,151,.16)";
       context.lineWidth = 1;
+      context.font = "11px Inter, sans-serif";
+      context.fillStyle = "#a8b7bf";
       for (let index = 0; index <= 5; index += 1) {
         const gy = padding.top + (rect.height - padding.top - padding.bottom) * index / 5;
         context.beginPath(); context.moveTo(padding.left, gy); context.lineTo(rect.width - padding.right, gy); context.stroke();
+        context.fillText(`${(yMin+(gy-padding.top)/scale).toFixed(0)}`,10,gy+4);
       }
+      const barMetres=100/scale,barY=rect.height-25;
+      context.strokeStyle="#a8b7bf";context.beginPath();context.moveTo(padding.left,barY);context.lineTo(padding.left+100,barY);context.stroke();
+      context.fillText(`${barMetres.toFixed(1)} m en proyección`,padding.left,barY-8);
+      const cx=rect.width-48,cy=65,radius=23;
+      context.beginPath();context.arc(cx,cy,radius,0,2*Math.PI);context.stroke();
+      const northAngle=(-90-rotation)*Math.PI/180;
+      context.beginPath();context.moveTo(cx,cy);context.lineTo(cx+radius*Math.cos(northAngle),cy+radius*Math.sin(northAngle));context.stroke();
+      context.fillText("N ref.",cx-16,cy-radius-8);
+      context.fillText(`Az ${points.at(-1)!.azimuth.toFixed(1)}°`,cx-30,cy+radius+17);
       const gradient = context.createLinearGradient(0, padding.top, 0, rect.height - padding.bottom);
       gradient.addColorStop(0, "#56c7ff");
       gradient.addColorStop(0.55, "#d7ff43");
@@ -85,27 +102,28 @@ export function Trajectory3D({ survey, holeCode }: { survey: SurveyPoint[]; hole
       }
       context.fillStyle = "#92a0a7";
       context.font = "10px Inter, sans-serif";
-      context.fillText("COLLAR · 0 m", x(projected[0].px) + 10, y(projected[0].py) - 8);
+      context.fillText(originLabel ?? "COLLAR · 0 m", x(projected[0].px) + 10, y(projected[0].py) - 8);
       const end = projected.at(-1)!;
       context.fillStyle = "#edf2f4";
-      context.fillText(`FONDO · ${end.depth.toFixed(0)} m MD`, Math.min(rect.width - 145, x(end.px) + 10), y(end.py) + 4);
+      context.fillText(`${trajectoryPoints ? "ESTACIÓN" : "FONDO"} · ${end.depth.toFixed(0)} m MD`, Math.min(rect.width - 145, x(end.px) + 10), y(end.py) + 4);
       context.fillStyle = "#718087";
-      context.fillText("TVD ↓", 16, padding.top + 12);
+      context.fillText("m proyectados ↓", 8, 16);
       context.fillText("Proyección E–N", rect.width - 130, rect.height - 18);
     };
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [points, rotation]);
+  }, [points, rotation, originLabel, trajectoryPoints]);
 
   const end = points.at(-1);
   return <div className="trajectory-3d">
     <div className="trajectory-controls">
-      <div><b>Trayectoria espacial · {holeCode}</b><span>Proyección 3D calculada desde inclinación, azimut y profundidad medida</span></div>
+      <div><b>Trayectoria espacial · {holeCode}</b><span>{methodLabel ?? "Proyección 3D calculada desde inclinación, azimut y profundidad medida"}</span></div>
       <label>Rotación <input aria-label="Rotación de trayectoria" type="range" min="0" max="180" value={rotation} onChange={(event) => setRotation(Number(event.target.value))}/><output>{rotation}°</output></label>
     </div>
     <canvas ref={canvasRef} role="img" aria-label={`Trayectoria tridimensional de ${holeCode}`} />
-    <div className="trajectory-stats"><span>Desplazamiento E <b>{end?.east.toFixed(1) ?? "0.0"} m</b></span><span>Desplazamiento N <b>{end?.north.toFixed(1) ?? "0.0"} m</b></span><span>TVD calculada <b>{end?.tvd.toFixed(1) ?? "0.0"} m</b></span></div>
+    <div className="trajectory-stats"><span>{trajectoryPoints ? "Coordenada E" : "Desplazamiento E"} <b>{end?.east.toFixed(1) ?? "0.0"} m</b></span><span>{trajectoryPoints ? "Coordenada N" : "Desplazamiento N"} <b>{end?.north.toFixed(1) ?? "0.0"} m</b></span><span>TVD calculada <b>{end?.tvd.toFixed(1) ?? "0.0"} m</b></span><span>Azimut última estación <b>{end?.azimuth.toFixed(2)??"—"}° / 360°</b></span></div>
+    <p className="source-note">Escala uniforme en metros proyectados; la perspectiva combina TVD y posición horizontal. E/N/TVD son relativos al ancla. N ref. sigue la referencia declarada arriba, no certifica norte geográfico. El perfil 2D conserva MD y grados observados.</p>
   </div>;
 }

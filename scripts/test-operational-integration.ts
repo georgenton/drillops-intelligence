@@ -17,7 +17,8 @@ async function main() {
   try {
     await admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
     await admin.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
-    await admin.query(`GRANT SELECT,INSERT,UPDATE ON operational_imports,operational_shifts,operational_revisions,operational_decisions TO ${role}`);
+    await admin.query(`GRANT SELECT,INSERT,UPDATE ON operational_imports,operational_shifts,operational_revisions,operational_decisions,operational_reports,operational_report_revisions TO ${role}`);
+    await admin.query(`GRANT SELECT ON operational_quick_records TO ${role}`);
     url.username = role; url.password = password; process.env.DATABASE_URL = url.toString(); process.env.DRILLOPS_ENV = "staging";
     const { operationalPool, tenantTransaction } = await import("../lib/operational-db");
     const { commitImport, correctShift, readOperation } = await import("../lib/operational-store");
@@ -32,6 +33,7 @@ async function main() {
     const shift: OperationalShift = { logicalKey: "synthetic-day-1", date: "2026-05-01", rigCode: "RIG-SYNTHETIC-001", holeCode: "SYNTHETIC-HOLE", projectCode: "SYNTHETIC", shiftType: "day", granularity: "shift", startDepthM: 0, endDepthM: 10, advanceM: 10, drillingHours: 5, totalHours: 12, activities: [{ label: "PERFORACIÓN", hours: 5, cell: "C28" }], parameters: { rpm: null, torque: null, torqueUnit: null, pulldownPsi: null, holdbackPsi: null }, source: { file: "synthetic.xlsx", fileSha256: "synthetic-v1", sheet: "RIG-SYNTHETIC-001", cells: {} }, warnings: [] };
     const batch: OperationalImport = { adapterVersion: "integration-synthetic-v1", archiveSha256: "synthetic-v1", shifts: [shift], crownSnapshots: [], issues: [], summary: { workbooks: 1, operationalSheets: 1, rigs: 1, holes: 1, shiftPositions: 1, positiveAdvances: 1, advanceM: 10, drillingHoursWithAdvance: 5, ropMPerHour: 2, byRig: { "RIG-SYNTHETIC-001": 10 } } };
 
+    batch.operationalReports=[{key:"synthetic-report",date:shift.date,rigCode:shift.rigCode,holeCode:shift.holeCode,source:{file:"synthetic.xlsx",fileSha256:"synthetic-v1",sheet:shift.rigCode},survey:[],consumptions:[],materials:[],equipmentHours:[],fluidParameters:[]}];
     await check("runtime is non-owner, non-superuser, NOBYPASSRLS", async () => {
       const roles = await runtime!.query("SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user");
       assert.equal(roles.rows[0].rolsuper, false); assert.equal(roles.rows[0].rolbypassrls, false);
@@ -45,6 +47,30 @@ async function main() {
     await check("identical import is idempotent", async () => {
       assert.equal((await commitImport(session, batch)).duplicate, true);
       assert.equal((await readOperation(tenantA)).shifts[0].revision, 1);
+    });
+    await check("expanded reports persist with enforced tenant scope and no empty revisions",async()=>{
+      assert.equal((await readOperation(tenantA)).reports.length,1);
+      const foreign=await tenantTransaction(tenantB,c=>c.query("SELECT * FROM operational_reports"));assert.equal(foreign.rowCount,0);
+      await assert.rejects(tenantTransaction(tenantB,c=>c.query("INSERT INTO operational_reports(tenant_id,logical_key,payload,adapter_version) VALUES($1,'forbidden','{}','synthetic')",[tenantA])),error=>(error as {code:string}).code==="42501");
+      const {writeOperationalReports}=await import("../lib/operational-report-store");
+      assert.equal(await tenantTransaction(tenantA,c=>writeOperationalReports(c,tenantA,batch.operationalReports!,batch.adapterVersion)),0);
+      const version=await tenantTransaction(tenantA,c=>c.query("SELECT revision FROM operational_reports WHERE logical_key='synthetic-report'"));assert.equal(version.rows[0].revision,1);
+      const history=await tenantTransaction(tenantA,c=>c.query("SELECT * FROM operational_report_revisions"));assert.equal(history.rowCount,1);
+      assert.equal((await tenantTransaction(tenantB,c=>c.query("SELECT * FROM operational_report_revisions"))).rowCount,0);
+    });
+    await check("backfill refuses a report edited after preview and replays without writes",async()=>{
+      const {backfillOperationalReports}=await import("../lib/operational-backfill");
+      const {writeOperationalReports}=await import("../lib/operational-report-store");
+      const preview=await backfillOperationalReports(session,batch);
+      await tenantTransaction(tenantA,c=>writeOperationalReports(c,tenantA,[{...batch.operationalReports![0],holeCode:"CHANGED-SYNTHETIC"}],batch.adapterVersion,userA));
+      await assert.rejects(backfillOperationalReports(session,batch,preview.digest),/BACKFILL_PLAN_CONFLICT/);
+      const reviewed=await backfillOperationalReports(session,batch);
+      assert.ok("reportCounts" in reviewed);assert.equal(reviewed.reportCounts.updated,1);
+      const applied=await backfillOperationalReports(session,batch,reviewed.digest);
+      assert.ok("reportsChanged" in applied);assert.equal(applied.reportsChanged,1);
+      const repeatPlan=await backfillOperationalReports(session,batch);
+      const repeated=await backfillOperationalReports(session,batch,repeatPlan.digest);
+      assert.ok("reportsChanged" in repeated);assert.equal(repeated.reportsChanged,0);assert.equal(repeated.shiftsChanged,0);
     });
     await check("concurrent same archive creates one import", async () => {
       const next = { ...batch, archiveSha256: "synthetic-concurrent" };
@@ -105,7 +131,7 @@ async function main() {
     console.log(`Operational PostgreSQL integration: ${checks} checks passed; synthetic data only; disposable port 5448.`);
   } finally {
     await runtime?.end();
-    await admin.query(`REVOKE ALL ON operational_imports,operational_shifts,operational_revisions,operational_decisions FROM ${role}`).catch(() => undefined);
+    await admin.query(`REVOKE ALL ON operational_imports,operational_shifts,operational_revisions,operational_decisions,operational_reports,operational_report_revisions FROM ${role}`).catch(() => undefined);
     await admin.query(`REVOKE ALL ON SCHEMA public FROM ${role}`).catch(() => undefined);
     await admin.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
     await admin.end();

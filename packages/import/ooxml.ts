@@ -1,7 +1,7 @@
 import { SaxesParser } from "saxes";
 import { readZip, type ZipExpansionBudget } from "./zip";
 export interface Cell { value: string | number | null; formula: string | null }
-export interface Sheet { name: string; cells: Map<string, Cell> }
+export interface Sheet { name: string; cells: Map<string, Cell>; merges?: string[] }
 type Node = { name: string; attrs: Record<string, string>; text: string; children: Node[] };
 function xml(data: Buffer | undefined): Node {
   if (!data || data.length > 16 * 1024 * 1024) throw new Error("XML_MISSING_OR_TOO_LARGE");
@@ -35,10 +35,11 @@ export function operationalSheets(input: Buffer, budget?: ZipExpansionBudget, al
     const rel = relations.find(node => node.attrs.Id === sheet.attrs["r:id"]);
     if (!rel || rel.attrs.TargetMode === "External" || !/^worksheets\/sheet\d+\.xml$/.test(rel.attrs.Target)) throw new Error("SHEET_RELATION_INVALID");
     const cells = new Map<string, Cell>();
-    for (const node of descendants(xml(files.get(`xl/${rel.attrs.Target}`)), "c")) {
+    const document = xml(files.get(`xl/${rel.attrs.Target}`));
+    for (const node of descendants(document, "c")) {
       const ref = node.attrs.r;
       // No footer, signatures, personnel tables or arbitrary workbook text leaves this layer.
-      if (!/^[A-Z]{1,2}\d{1,3}$/.test(ref) || Number(ref.replace(/\D/g, "")) > 48) continue;
+      if (!/^[A-Z]{1,2}\d{1,3}$/.test(ref) || Number(ref.replace(/\D/g, "")) > 74) continue;
       const raw = node.children.find(n => n.name === "v")?.text ?? "";
       const formula = node.children.find(n => n.name === "f")?.text ?? null;
       let value: Cell["value"] = null;
@@ -48,7 +49,11 @@ export function operationalSheets(input: Buffer, budget?: ZipExpansionBudget, al
       else if (!node.attrs.t || node.attrs.t === "n") value = raw.trim() && Number.isFinite(Number(raw)) ? Number(raw) : null;
       cells.set(ref, { value, formula });
     }
-    sheets.push({ name: sheet.attrs.name, cells });
+    // Operational blocks end before observations/personnel; do not export narrative.
+    const boundary = [...cells].filter(([, c]) => typeof c.value === "string" && /^(OBSERVACIONES|PERSONAL|FIRMAS)/i.test(c.value.trim())).map(([r]) => Number(r.replace(/\D/g, ""))).filter(r => r > 48);
+    const end = Math.min(75, ...boundary);
+    for (const ref of cells.keys()) if (Number(ref.replace(/\D/g, "")) >= end) cells.delete(ref);
+    sheets.push({ name: sheet.attrs.name, cells, merges: descendants(document, "mergeCell").map(n => n.attrs.ref) });
   }
   return { sheets, externalLinks: [...files.keys()].some(name => name.startsWith("xl/externalLinks/")) };
 }

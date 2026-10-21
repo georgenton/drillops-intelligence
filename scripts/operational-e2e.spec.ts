@@ -2,6 +2,13 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 import { crc32 } from "../packages/import/zip";
 const password = "Synthetic-E2E-Only-2026!";
 const tenantA = "00000000-0000-4000-8000-000000000e21";
+const headings:Record<string,string>={Dashboard:"Centro de operación",Reportes:"Reporte ejecutivo",Coronas:"Coronas y rendimiento",Intervalos:"Intervalos de perforación",Consumibles:"Consumibles, agua y diesel"};
+async function navigate(page:Page,label:string){
+  const sidebar=page.locator(".sidebar");
+  if(await page.getByRole("button",{name:"Abrir menú",exact:true}).isVisible())await page.getByRole("button",{name:"Abrir menú",exact:true}).click();
+  await sidebar.getByRole("link",{name:new RegExp(`^${label}(\\s*AI)?$`)}).click();
+  await expect(page.getByRole("heading",{level:1,name:headings[label]??label,exact:true})).toBeVisible();
+}
 function zip(entries: Record<string, string | Buffer>) {
   const locals: Buffer[] = [], directories: Buffer[] = []; let offset = 0;
   for (const [name, value] of Object.entries(entries)) {
@@ -28,7 +35,7 @@ async function login(page: Page, name: "supervisor" | "client" | "other" | "revi
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   expect((await response).status()).toBe(200);
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Centro de operación", exact: true })).toBeVisible();
 }
 async function apiState(request: APIRequestContext) {
   const response = await request.get("/api/v2/operation?from=2026-05-01&to=2026-05-31");
@@ -41,7 +48,10 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   const origin = new URL(baseURL!).origin;
   const anonymous = await page.request.get("/api/v2/operation"); expect(anonymous.status()).toBe(401);
   await login(page, "supervisor");
-  await expect(page.getByRole("heading", { name: "Sin registros en este contexto" })).toBeVisible();
+  expect((await apiState(page.request)).shifts).toHaveLength(0);
+  await expect(page.getByText(/0 posiciones de turno/)).toBeVisible();
+  await page.getByLabel("Desde",{exact:true}).fill("2026-05-01");
+  await page.getByLabel("Hasta",{exact:true}).fill("2026-05-31");
   await page.getByRole("link", { name: "Importaciones", exact: true }).click();
   await page.getByLabel("Archivo ZIP operacional").setInputFiles({ name: "synthetic-e2e.zip", mimeType: "application/zip", buffer: fixture() });
   await page.getByRole("button", { name: "Analizar vista previa" }).click();
@@ -55,29 +65,32 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   await expect(page.getByRole("status")).toContainText("sin duplicados");
   expect((await apiState(page.request)).summary.shiftCount).toBe(2);
   await page.getByRole("link", { name: "Turnos", exact: true }).click();
-  const answers = ["12", "6", "Synthetic verified correction E2E"];
-  page.on("dialog", async dialog => { await dialog.accept(answers.shift() ?? ""); });
-  await page.getByRole("button", { name: "Corregir", exact: true }).first().click();
-  await expect(page.getByRole("status")).toContainText("Corrección guardada");
+  // Restored UI deliberately has no correction dialog; preserve the canonical correction/API contract.
+  const correction=await page.request.patch("/api/v2/operation",{headers:{origin},data:{logicalKey:state.shifts.find((s:{shiftType:string})=>s.shiftType==="day").logicalKey,revision:1,advanceM:12,drillingHours:6,reason:"Synthetic verified correction E2E"}});
+  expect(correction.status()).toBe(200);await page.reload();
   state = await apiState(page.request); expect(state.summary.advanceM).toBe(12); expect(state.summary.ropMPerHour).toBe(2);
   await page.getByLabel("Equipo", { exact: true }).selectOption("RIG-E2E-001");
   for (const section of ["Dashboard", "Reportes", "Drill Assistant"]) {
-    await page.getByRole("link", { name: section, exact: true }).click();
+    await navigate(page,section);
     const path = section === "Dashboard" ? "/dashboard" : section === "Reportes" ? "/reportes" : "/drill-assistant";
     await expect(page).toHaveURL(url => url.pathname === path && url.searchParams.get("rig") === "RIG-E2E-001");
-    await expect(page.getByRole("heading", { name: section, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level:1,name: headings[section]??section, exact: true })).toBeVisible();
     await expect(page.getByLabel("Equipo", { exact: true })).toHaveValue("RIG-E2E-001");
-    await expect(page.locator("article").filter({ hasText: "Avance del periodo" }).getByRole("heading")).toHaveText("12 m");
+    if(section==="Dashboard")await expect(page.locator(".kpi-card").filter({hasText:"Metros perforados"})).toContainText("12");
+    if(section==="Reportes")await expect(page.locator(".report-kpis")).toContainText("12 m");
     expect((await apiState(page.request)).summary.advanceM).toBe(12);
   }
   await page.getByLabel("Pregunta operacional").fill("¿Cuántos metros perforamos?");
   await page.getByRole("button", { name: "Consultar", exact: true }).click();
   await expect(page.getByRole("status").last()).toHaveText("Avance: 12 m");
-  await page.getByRole("link", { name: "Bit Advisor", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Historial conservador de coronas" })).toBeVisible();
-  await expect(page.getByText(/UCS_MISSING/)).toBeVisible();
+  await navigate(page,"Bit Advisor");
+  await expect(page.getByRole("heading", { name: "Mantener revisión manual" })).toBeVisible();
+  await expect(page.getByLabel("UCS (MPa, opcional)", { exact: true })).toBeVisible();
+  // Keep coverage of the missing-UCS path even though the didactic example now
+  // explicitly supplies a hypothetical 200 MPa, independently tested elsewhere.
+  await page.getByLabel("UCS (MPa, opcional)", { exact: true }).fill("");
   await page.getByRole("button", { name: "Adjuntar este escenario a la decisión", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Se guardará como hipótesis");
+  await expect(page.getByRole("status")).toContainText("Escenario adjuntado como hipótesis");
   await page.getByLabel("Corona para decisión").selectOption("SYN-E2E-001");
   await page.getByLabel("Razón", { exact: true }).fill("Synthetic supervisor review, no physical validation claimed");
   await page.getByRole("button", { name: "Guardar decisión" }).click();
@@ -99,11 +112,11 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   await expect(page.getByRole("heading", { name: "Decisiones del contexto · trazabilidad de supervisión", exact: true })).toBeVisible();
   await expect(page.getByText("Synthetic supervisor review, no physical validation claimed", { exact: true })).toBeVisible();
   await expect(page.getByText(/Escenario hipotético rop-exponential-v2.1, no validado/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Imprimir reporte del filtro activo", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Imprimir / Guardar PDF", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("heading", { name: "Reportes", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
-  await expect(page.locator("article").filter({ hasText: "Avance del periodo" }).getByRole("heading")).toHaveText("12 m");
+  await expect(page.getByRole("heading", { name: "Reporte ejecutivo", exact: true })).toBeVisible();
+  await navigate(page,"Dashboard");
+  await expect(page.locator(".kpi-card").filter({hasText:"Metros perforados"})).toContainText("12");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/operational-e2e/synthetic-mobile.png", fullPage: true });
   const clientContext = await browser.newContext({ baseURL }); const client = await clientContext.newPage();
@@ -116,14 +129,14 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   await login(reviewer, "reviewer");
   const beforeReview = await apiState(reviewer.request);
   expect(beforeReview.decisions).toHaveLength(1);
-  for (const label of ["Dashboard", "Operación", "Turnos", "Coronas", "Reportes", "Bit Advisor", "Drill Assistant"]) {
-    await reviewer.getByRole("link", { name: label, exact: true }).click();
-    await expect(reviewer.getByRole("heading", { name: label, exact: true })).toBeVisible();
+  for (const label of ["Dashboard", "Operación", "Sondeos", "Taladros", "Turnos", "Intervalos", "Coronas", "Bit Advisor", "Inventario", "Consumibles", "Survey", "Depth Intelligence", "Analítica", "Reportes", "Drill Assistant"]) {
+    await navigate(reviewer,label);
   }
+  for(const label of ["Importaciones","Configuración","Plan y facturación","Empresas"])await expect(reviewer.locator(".sidebar").getByRole("link",{name:label,exact:true})).toHaveCount(0);
   await reviewer.getByLabel("Pregunta operacional").fill("metros");
   await reviewer.getByRole("button", { name: "Consultar", exact: true }).click();
   await expect(reviewer.getByRole("status").last()).toHaveText("Avance: 12 m");
-  await reviewer.getByRole("link", { name: "Bit Advisor", exact: true }).click();
+  await navigate(reviewer,"Bit Advisor");
   await reviewer.getByLabel("Horizonte futuro efectivo (h, máximo 168)").fill("4");
   await expect(reviewer.getByRole("button", { name: "Guardar decisión" })).toBeDisabled();
   await expect(reviewer.getByRole("button", { name: "Adjuntar este escenario a la decisión" })).toHaveCount(0);
@@ -133,7 +146,7 @@ test("private commercial story: import, reconcile, correct, Advisor, persistence
   expect((await reviewer.request.post("/api/v2/imports?commit=true", { headers: { origin }, data: "denied" })).status()).toBe(403);
   expect((await reviewer.request.get("/api/v2/operation?tenantId=00000000-0000-4000-8000-000000000e22")).status()).toBe(403);
   expect(await apiState(reviewer.request)).toEqual(beforeReview);
-  await reviewer.getByRole("button", { name: "Salir", exact: true }).click();
+  await reviewer.getByRole("button", { name: "Cerrar sesión", exact: true }).click();
   await expect(reviewer).toHaveURL(/\/login$/);
   expect((await reviewer.request.get("/api/v2/operation")).status()).toBe(401);
   await reviewContext.close();

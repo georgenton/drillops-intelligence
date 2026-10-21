@@ -4,7 +4,7 @@ import { operationalPool } from "./operational-db";
 import { isCommerciallyClosed,isDemoMode } from "./runtime-mode";
 import { verifySession } from "./auth";
 import type { AppRole } from "./access-control";
-export type PrivateSession = { userId: string; tenantId: string; email: string; name: string; role: AppRole; plan: "Básico" | "Intermedio" | "Premium"; demo?:boolean };
+export type PrivateSession = { userId: string; tenantId: string; tenantName?: string; email: string; name: string; role: AppRole; plan: "Básico" | "Intermedio" | "Premium"; demo?:boolean };
 export const sessionHash = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
 export async function privateSession(): Promise<PrivateSession | null> {
   if (isCommerciallyClosed()) return null;
@@ -16,7 +16,7 @@ export async function privateSession(): Promise<PrivateSession | null> {
   const token = (await cookies()).get("drillops_private_session")?.value;
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const result = await operationalPool().query<PrivateSession>(`
-    SELECT u.id AS "userId", t.id AS "tenantId",u.email,u.name,
+    SELECT u.id AS "userId", t.id AS "tenantId",t.name AS "tenantName",u.email,u.name,
       CASE WHEN $2='staging' AND m.role::text='client'
         AND COALESCE(t.settings->'operationalReviewMembershipIds','[]'::jsonb) ? m.id::text
         THEN 'operational_reviewer' ELSE m.role::text END AS role,

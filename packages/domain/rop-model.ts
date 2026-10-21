@@ -24,6 +24,15 @@ export function twoPointDecay(rop0: number, rop1: number, elapsedHours: number, 
   const trend: Trend = betaPerHour > 0 ? "DECAY" : betaPerHour === 0 ? "STABLE" : "IMPROVING_NOT_POLISHING";
   return { betaPerHour, ...alphaFor(betaPerHour, ucs), trend, validation: "TWO_POINT_SCENARIO_NOT_FIELD_VALIDATED" as const, version: ROP_MODEL_VERSION };
 }
+/** Same V2 algebra, but a hypothetical UCS must never claim independent measurement. */
+export function scenarioCoefficients(rop0: number, rop1: number, elapsedHours: number, ucs: number | null, source: string, kind: "hypothetical" | "independent") {
+  const estimate = twoPointDecay(rop0, rop1, elapsedHours,
+    kind === "independent" && ucs !== null ? { valueMpa: ucs, source, independentlyMeasured: true } : null);
+  if (kind !== "hypothetical" || ucs === null) return estimate;
+  finite("UCS hipotética MPa", ucs, true);
+  if (estimate.betaPerHour < 0) return estimate;
+  return { ...estimate, alphaPerMpaHour: result(estimate.betaPerHour / ucs), alphaStatus: "HYPOTHETICAL_UCS" as const };
+}
 export function predictRop(ropNow: number, beta: number, horizonHours: number) {
   finite("ROP", ropNow, true); finite("Beta", beta); finite("Horas", horizonHours);
   return result(ropNow * Math.exp(-beta * horizonHours));
