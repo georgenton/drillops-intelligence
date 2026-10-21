@@ -10,6 +10,9 @@ import { observedDepth } from "@/packages/domain/operational-display";
 import type { PrivateSession } from "@/lib/private-auth";
 import { canAccessSection } from "@/lib/access-control";
 import { useReviewScenario } from "./review-scenario";
+import { rigEstimatePerMetre } from "@/packages/domain/catalog-metrics";
+import { reviewEquipmentCost, rigConsumptionTotals, maintenanceHours } from "@/packages/domain/operational-review-v2";
+import { canViewOperationalCosts } from "@/lib/access-control";
 
 const CatalogContext = createContext<{ catalog: OperationalCatalog | null; error: string; refresh: () => Promise<void> }>({catalog:null,error:"",refresh:async()=>{}});
 export function OperationalCatalogProvider({ children }: { children: ReactNode }) {
@@ -51,9 +54,12 @@ export function OperationalCatalogView({kind,data,session}:{kind:"rig"|"hole";da
     {notice&&<p role="status">{notice}</p>}
     <div className={`cards-grid ${kind==="rig"?"rigs-grid":""}`}>{entries.map(entry=>{
       const hole="rigCode" in entry?entry:null,rig=hole?null:entry as RigCatalogRecord;
-      const rows=data.shifts.filter(s=>hole?s.holeCode?.toUpperCase()===hole.code:s.rigCode.toUpperCase()===entry.code);
+      const rows=data.shifts.filter(s=>hole?s.holeCode?.toUpperCase()===hole.code&&(!hole.rigCode||s.rigCode.toUpperCase()===hole.rigCode.toUpperCase()):s.rigCode.toUpperCase()===entry.code);
       const depth=hole?observedDepth(rows):null;
       const percent=hole?.targetDepthM&&depth!==null?depth/hole.targetDepthM*100:null;
+      const cost=review.enabled?reviewEquipmentCost(rows,review.scenario!.syntheticTariff):null;
+      const rigConsumption=rig?rigConsumptionTotals(data.reports,entry.code):[];
+      const maintenance=rig?maintenanceHours(rows):null;
       return <article className={hole?"hole-card":"rig-card"} key={`${entry.code}|${hole?.rigCode??""}`}>
         <header><div><span className="status">{review.enabled&&entry.revision===0?"REFERENCIA DE REVISIÓN":entry.source==="configured"?"CONFIGURADO":"OBSERVADO EN REPORTES"}</span><h3>{entry.code}</h3><p>{rig?[rig.name,rig.model].filter(Boolean).join(" · ")||"Identificación por código de reporte":hole?.rigCode}</p></div>{hole?<Target/>:<Wrench/>}</header>
         {hole&&<div className="hole-depth"><div><span style={{width:`${Math.min(100,percent??0)}%`}}/></div><b>{fmt(depth)} m</b><small> / {fmt(hole.targetDepthM)} m objetivo · {fmt(percent)}%</small></div>}
@@ -63,6 +69,8 @@ export function OperationalCatalogView({kind,data,session}:{kind:"rig"|"hole";da
             {"hourlyCostUsd" in entry&&<><dt>Tarifa configurada USD/h</dt><dd>{fmt(rig?.hourlyCostUsd)}</dd></>}
           </>}
           <dt>Revisión de ficha</dt><dd>{entry.revision||"Sin ficha configurada"}</dd>
+          {hole&&(review.enabled||Boolean(session&&canViewOperationalCosts(session.role)))&&<><dt>Costo parcial de equipo</dt><dd>{fmt(review.enabled?cost?.perMetre:rigEstimatePerMetre(rows,catalog))} USD/m <small>{review.enabled?"Estimación · tarifa supuesta":"Estimación · tarifa declarada"}</small></dd><dt>Alcance del costo</dt><dd>Equipo: tarifa × horas efectivas / metros conocidos. Excluye coronas y consumibles; no costo integral.{cost&&<small> {fmt(cost.hours)} h / {fmt(cost.metres)} m; {cost.missingHours} horas y {cost.missingAdvance} avances ausentes.</small>}</dd></>}
+          {rig&&<><dt>Periodo visible</dt><dd>{data.filters.from??rows[0]?.date??"Sin fecha"} — {data.filters.to??rows.at(-1)?.date??"Sin fecha"}</dd>{rigConsumption.map(c=><div key={`${c.label}|${c.unit}`} style={{display:"contents"}}><dt>{c.label==="Combustible"?"Combustible (diésel por confirmar)":c.label}</dt><dd>{fmt(c.total)} {c.unit}<small> Día {fmt(c.day)} · noche {fmt(c.night)} · reporte {fmt(c.report)}. {c.missing} lecturas ausentes; sin convertir gls.</small></dd></div>)}<dt>Mantenimiento del periodo</dt><dd>{fmt(maintenance?.total)} h<small> Día {fmt(maintenance?.day)} · noche {fmt(maintenance?.night)}. Sólo {maintenance?.labels.join(", ")||"actividades de mantenimiento/reparación"}; {maintenance?.missing??0} lecturas ausentes. No incluye todas las horas no operativas ni representa el histórico de vida del equipo.</small></dd></>}
         </dl>
         <footer>{writable&&<button onClick={()=>{setEditing(entry);setConfigureSurvey(Boolean(hole?.surveyConfiguration));setFailure("");setOpen(true);}}>Configurar {hole?"sondeo y metas":"taladro"}</button>}
           <Link href={`${hole?"/depth-intelligence":"/operacion"}?${new URLSearchParams({...data.filters,[hole?"hole":"rig"]:entry.code})}`}>Ver operación</Link>

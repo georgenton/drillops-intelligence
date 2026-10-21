@@ -28,11 +28,17 @@ test("read-only review scenario is deterministic, populated, exportable and tena
   expect(scenario.id).toBe("REVISION_RAUL_2026_10_V1");expect(scenario.manifest.length).toBeGreaterThan(0);expect(scenario.sourceVersion).toMatch(/^[a-f0-9]{64}$/);
   expect((await (await reviewer.request.get("/api/v2/review-scenario")).json()).scenario).toEqual(scenario);
   expect(scenario.candidates).toHaveLength(3);
+  expect(scenario.revision).toBe("RAUL_V2_2026_10_20");
+  for(const sample of scenario.raulMse)expect(scenario.manifest.find((entry:{field:string})=>entry.field===sample.id).value).toEqual(sample);
   expect(scenario.candidates.every((c:{stock:number;reserved:number})=>c.stock===5&&c.reserved===1)).toBe(true);
   const page=await reviewer.newPage(),failures:string[]=[];
   page.on("pageerror",error=>failures.push(error.message));
   await page.goto("/dashboard");
   await expect(page.getByText("Versión de revisión · reportes reales + supuestos para validar",{exact:true})).toBeVisible();
+  await page.goto("/operacion");await expect(page.getByRole("heading",{name:"Día, noche y total del periodo"})).toBeVisible();
+  await page.goto("/intervalos");await expect(page.getByRole("heading",{name:/MSE experimental · misma muestra/})).toBeVisible();
+  await page.goto("/depth-intelligence");await expect(page.getByRole("heading",{name:/MSE HQ\/NQ · entradas/})).toBeVisible();
+  await page.goto("/coronas");await expect(page.getByText("Comparación transparente",{exact:true})).toBeVisible();
   await page.goto("/bit-advisor");
   await expect(page.locator(".recommend-card")).toHaveCount(3);
   for(let i=0;i<3;i++){

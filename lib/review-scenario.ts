@@ -26,5 +26,5 @@ export async function readReviewScenario(session:PrivateSession) {
     materials:canAccessSection({...session,section:"consumibles"})?r.materials:[],
   }));
   const scenario=buildReviewScenario(data,catalog);
-  return {...scenario,sourceVersion:createHash("sha256").update(JSON.stringify({shifts:data.shifts,reports:data.reports,catalog})).digest("hex")};
+  return {...scenario,sourceVersion:createHash("sha256").update(JSON.stringify({revision:scenario.revision,shifts:data.shifts,reports:data.reports,catalog})).digest("hex")};
 }

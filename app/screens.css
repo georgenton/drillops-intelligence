@@ -35,3 +35,4 @@
 .bha-readiness aside>a{display:flex;align-items:center;gap:4px;color:var(--green);font-size:8px}
 .bha-readiness aside>a svg{width:11px}
 @media(max-width:820px){.bha-readiness>div:last-child{grid-template-columns:1fr}}
+.parameters-grid.parameters-v2-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.parameters-v2-grid .metric-range{min-width:0}.parameters-v2-grid .metric-range>.chart{display:block;height:190px;min-height:190px;width:100%}@media(max-width:820px){.parameters-grid.parameters-v2-grid{grid-template-columns:minmax(0,1fr)}}

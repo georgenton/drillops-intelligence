@@ -3,6 +3,7 @@ import {useState} from "react";
 import type {RecoveredData} from "./recovered-operational-views";
 import {useReviewScenario,ReviewMark} from "./review-scenario";
 import {EChart} from "./echart";
+import {reviewEquipmentCost} from "@/packages/domain/operational-review-v2";
 const fmt=(n:number)=>new Intl.NumberFormat("es-EC",{maximumFractionDigits:2}).format(n);
 export function ReviewConsumptionPanel({data}:{data:RecoveredData}){
  const {scenario,enabled}=useReviewScenario();
@@ -33,10 +34,10 @@ export function ReviewAnalytics(){
 export function ReviewCostSummary({data}:{data:RecoveredData}){
  const {scenario,enabled}=useReviewScenario();
  if(!enabled||!scenario)return null;
- const cost=scenario.syntheticTariff*data.summary.drillingHours;
+ const estimate=reviewEquipmentCost(data.shifts,scenario.syntheticTariff);
  return <section className="panel supplementary-panel"><header className="panel-head"><div><h3>Costo parcial de referencia · sólo equipo</h3><p>Tarifa sintética × horas efectivas reales. No incluye compras ni consumibles y no expone las tarifas financieras privadas.</p></div><ReviewMark/></header><div className="parameters-grid">
  <div className="metric-range"><header style={{display:"flex",flexDirection:"column",alignItems:"flex-start"}}><span>Tarifa de ejemplo</span><b>{fmt(scenario.syntheticTariff)} USD/h</b></header></div>
- <div className="metric-range"><header style={{display:"flex",flexDirection:"column",alignItems:"flex-start"}}><span>Costo estimado</span><b>{fmt(cost)} USD</b></header></div>
- <div className="metric-range"><header style={{display:"flex",flexDirection:"column",alignItems:"flex-start"}}><span>Costo parcial por metro</span><b>{data.summary.advanceM>0?fmt(cost/data.summary.advanceM):"No aplica"} USD/m</b></header></div>
+ <div className="metric-range"><header style={{display:"flex",flexDirection:"column",alignItems:"flex-start"}}><span>Costo estimado</span><b>{estimate.cost===null?"No aplica":fmt(estimate.cost)} USD</b></header></div>
+ <div className="metric-range"><header style={{display:"flex",flexDirection:"column",alignItems:"flex-start"}}><span>Costo parcial por metro</span><b>{estimate.perMetre===null?"No aplica":fmt(estimate.perMetre)} USD/m</b></header><small>{estimate.missingAdvance} avances y {estimate.missingHours} horas ausentes; sólo cantidades conocidas.</small></div>
  </div></section>;
 }

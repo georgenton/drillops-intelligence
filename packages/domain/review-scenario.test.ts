@@ -38,6 +38,11 @@ describe("explicit review scenario",()=>{
   const c:OperationalCatalog={...catalog,rigs:[{code:"R",name:null,model:null,status:null,mechanicalDowntimeActivities:null,mechanicalClassificationEvidence:null,revision:0,source:"observed"}],holes:[{code:"H",rigCode:"R",targetDepthM:null,plannedMetersPerShift:null,planStartDate:null,guardsPerDay:null,status:null,surveyConfiguration:null,revision:0,source:"observed"}]};
   const before=structuredClone(shift),s=buildReviewScenario({shifts:[shift],reports:[],crowns:[]},c);
   expect(shift).toEqual(before);expect(c.holes[0].plannedMetersPerShift).toBeNull();
+  expect(s.revision).toBe("RAUL_V2_2026_10_20");
+  expect(s.raulMse).toHaveLength(3);
+  for(const sample of s.raulMse)expect(s.manifest.find(e=>e.field===sample.id)?.value).toEqual(sample);
+  expect(s.reviewDepthComplements[0].flow.value).toBe(50);
+  expect(s.manifest.find(e=>e.field==="flow:s")?.value).toEqual(s.reviewDepthComplements[0].flow);
   expect(s.catalog.holes[0].plannedMetersPerShift).toBeCloseTo(34.5);
   expect(s.catalog.holes[0].targetDepthM).toBe(50);
   expect(s.manifest.find(e=>e.field==="rigEstimatePerMetre")?.value).toBe(20);

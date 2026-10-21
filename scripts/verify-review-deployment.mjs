@@ -21,7 +21,8 @@ try{
  const before=await(await context.request.get("/api/v2/operation")).json();
  assert.equal(before.summary.shiftCount,248);assert.ok(Math.abs(before.summary.advanceM-2813.25)<1e-8);assert.equal(before.summary.drillingHours,1280);
  const response=await context.request.get("/api/v2/review-scenario");assert.equal(response.status(),200);
- const {scenario}=await response.json();assert.equal(scenario.id,"REVISION_RAUL_2026_10_V1");
+ const {scenario}=await response.json();assert.equal(scenario.id,"REVISION_RAUL_2026_10_V1");assert.equal(scenario.revision,"RAUL_V2_2026_10_20");
+ for(const sample of scenario.raulMse)assert.deepEqual(scenario.manifest.find(row=>row.field===sample.id)?.value,sample);
  const repeat=await(await context.request.get("/api/v2/review-scenario")).json();assert.deepEqual(repeat.scenario,scenario);
  fs.writeFileSync(path.join(root,"datos-y-supuestos.json"),JSON.stringify(scenario,null,2),{mode:0o600});
  for(const [format,file]of [["csv","datos-y-supuestos.csv"],["html","informe-datos-y-supuestos.html"]]){
@@ -45,8 +46,9 @@ try{
    await page.screenshot({path:path.join(root,`${section}-${width}.png`),fullPage:true});
    const essential={dashboard:".planning-grid",survey:".survey-visual","bit-advisor":".advisor-layout","depth-intelligence":".depth-layout"}[section];
    if(width===1440&&essential)await page.locator(essential).screenshot({path:path.join(root,`detalle-${section}.png`)});
+   if(section==="depth-intelligence"){await page.locator(".depth-chart-panel").evaluate(el=>{el.scrollLeft=el.scrollWidth;});await page.locator(".depth-layout").screenshot({path:path.join(root,`depth-mse-${width}.png`)});}
    outcomes.push({section,width,canvases,pass:true});
-   if(section==="survey"){await page.getByRole("button",{name:"Perfil 2D",exact:true}).click();await page.screenshot({path:path.join(root,`survey-2d-${width}.png`),fullPage:true});}
+   if(section==="survey"){await page.getByRole("button",{name:"Perfil 2D",exact:true}).click();await page.locator(".survey-visual canvas").first().waitFor();await page.waitForTimeout(1000);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(root,`survey-2d-${width}.png`),fullPage:true});}
   }
  }
  await page.goto("/dashboard");await page.waitForLoadState("networkidle");
@@ -62,6 +64,6 @@ try{
  assert.deepEqual(errors,[]);
  assert.equal((await context.request.delete("/api/auth/login",{headers:{origin:base}})).status(),200);
  assert.equal((await context.request.get("/api/v2/review-scenario")).status(),401);
- fs.writeFileSync(path.join(root,"verificacion.json"),JSON.stringify({base,scenarioId:scenario.id,sourceVersion:scenario.sourceVersion,outcomes,originalControls:before.summary,errors,readOnly:true,acceptanceRaul:"pending"},null,2),{mode:0o600});
+ fs.writeFileSync(path.join(root,"verificacion.json"),JSON.stringify({base,scenarioId:scenario.id,revision:scenario.revision,sourceVersion:scenario.sourceVersion,outcomes,originalControls:before.summary,errors,readOnly:true,acceptanceRaul:"pending"},null,2),{mode:0o600});
  console.log(JSON.stringify({target:base,checks:outcomes.length,errors,originalControls:"248 / 2813.25m / 1280h",evidence:root}));
 }finally{await context.close();await browser.close();}

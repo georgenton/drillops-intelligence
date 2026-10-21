@@ -6,10 +6,16 @@ import {buildReviewSurvey,type ReviewSurvey} from "./review-survey";
 import {reviewConsumptions} from "./review-consumptions";
 import {mechanicalAvailability,programmedMetres,rigEstimatePerMetre} from "./catalog-metrics";
 import {reconstructCrownHistory} from "./crown-history";
+import {buildReviewMse,buildReviewDepthComplements} from "./raul-mse";
+import {crownReview} from "./crown-review";
+import {guardiaTotals,rigConsumptionTotals,maintenanceHours,reviewPressureSeries} from "./operational-review-v2";
 
 export type ReviewManifestEntry={id:string;kind:"EXCEL"|"DERIVADO"|"SUPUESTO"|"SINTETICO";screen:string;context:string;field:string;original:unknown;value:unknown;unit:string|null;source:unknown;formula:string|null;reason:string;affected:string[];confirm:string};
 export type ReviewScenario={
  id:"REVISION_RAUL_2026_10_V1";catalog:OperationalCatalog;manifest:ReviewManifestEntry[];
+ revision:"RAUL_V2_2026_10_20";
+ raulMse:ReturnType<typeof buildReviewMse>;
+ reviewDepthComplements:ReturnType<typeof buildReviewDepthComplements>;
  defaultContext:{from:string;to:string;rig:string;hole:string};
  candidates:PrivateAdvisorProduct[];
  dashboardCrownReferenceM:number;syntheticTariff:number;
@@ -121,5 +127,20 @@ export function buildReviewScenario(data:Data,catalog:OperationalCatalog):Review
   dashboardCrownByContext.push(crown);
   for(const [field,value]of Object.entries(crown))add(`${r}/${h}`,`dashboardCrown.${field}`,value,crown.kind,null,representative??null,representative?"Corrida identificada más reciente con metros atribuibles >0 (empate por id). Selección representativa, NO corona activa. Referencia=max(250,ceil(metros×1.2/50)×50).":"Referencia sintética independiente; no serie real ni corona activa.",field==="attributedMetresM"||field==="referenceM"?"m":field==="ropMPerHour"?"m/h":null,"Dashboard");
  }
- return {id:"REVISION_RAUL_2026_10_V1",catalog:cloned,manifest,defaultContext,candidates,advisorContext,depthSeries,surveys,mse,dashboardCrownReferenceM,syntheticTariff:100,consumptionEntries,analyticsRadar,benchmark,mechanicalByContext,dashboardCrownByContext};
+ const raulMse=buildReviewMse(data.shifts),reviewDepthComplements=buildReviewDepthComplements(data.shifts,data.reports);
+ for(const sample of reviewPressureSeries(data.reports))add(`${sample.rig}/${sample.hole}`,`pressure:${sample.reportKey}`,sample,"SINTETICO",null,sample.source,sample.reason,"PSI","Dashboard");
+ for(const sample of raulMse)add(`${sample.rigCode}/${sample.holeCode}`,sample.id,sample,sample.classification==="SINTETICO"?"SINTETICO":"SUPUESTO",sample.classification==="SINTETICO"?null:sample.input,sample.source,sample.formula,"psi experimental","Intervalos / Depth Intelligence");
+ for(const sample of reviewDepthComplements){
+  add(`${sample.rigCode}/${sample.holeCode}`,`inclination:${sample.shiftKey}`,sample.inclination,sample.inclination.value===null?"SINTETICO":"SUPUESTO",sample.inclination.originalDip,sample.inclination.source,sample.inclination.method,"° desde vertical","Intervalos / Depth Intelligence");
+  add(`${sample.rigCode}/${sample.holeCode}`,`flow:${sample.shiftKey}`,sample.flow,sample.flow.classification==="SINTETICO"?"SINTETICO":"SUPUESTO",sample.flow.classification==="SINTETICO"?null:sample.flow.value,{observation:sample.flow.source,shiftKey:sample.shiftKey,startDepthM:sample.startDepthM,endDepthM:sample.endDepthM},sample.flow.method,sample.flow.unit,"Dashboard / Depth Intelligence");
+ }
+ for(const key of contexts){const [r,h]=key.split("\0"),rows=data.shifts.filter(s=>s.rigCode===r&&s.holeCode===h);
+  add(`${r}/${h}`,"guardiaTotals",guardiaTotals(rows),"DERIVADO",null,rows.map(s=>s.logicalKey),"Metros y horas conocidos sumados; ROP = Σmetros pareados / Σhoras pareadas. Exclusiones explícitas.","m; h; m/h","Operación");
+  const cr=crownReview(reconstructCrownHistory(data.crowns.filter(c=>c.rigCode===r&&c.holeCode===h),rows));
+  add(`${r}/${h}`,"crownComparison",cr.comparison,"DERIVADO",null,rows.map(s=>s.logicalKey),"Mismo compareCrownHistory para gráfica, tabla, tooltip y exportación; separado de referencias sintéticas.","m/h","Coronas");
+  add(`${r}/${h}`,"crownDepth",cr.depth,"DERIVADO",null,cr.rows.map(s=>({id:s.id,serial:s.serial,startDepthM:s.startDepthM,endDepthM:s.endDepthM,intervalM:s.intervalM,pairedMetres:s.pairedMetres,attributedHours:s.attributedHours,ropMPerHour:s.ropMPerHour})),"Límites de profundidad reportada; vacíos y solapes explícitos. No equivale al acumulado de longitudes de Performance.","m","Coronas");
+ }
+ for(const r of cloned.rigs){add(r.code,"rigConsumptions",rigConsumptionTotals(data.reports,r.code),"DERIVADO",null,"Reportes originales y sus unidades","No duplicar total de reporte con filas de guardia; sin convertir gls.",null,"Taladros");add(r.code,"maintenanceHours",maintenanceHours(data.shifts.filter(s=>s.rigCode===r.code)),"DERIVADO",null,"Etiquetas originales de actividad","Sólo mantenimiento/reparación; no todas las horas sin perforación.","h","Taladros");}
+ add("Coronas","performanceMapping",{x:"H = G − F, longitud de corrida",y:"J = H / I, m/h",bubble:"N, costo ambiguo; se usan marcadores uniformes",bars:"Performance acumula longitudes; vista actual declara MD reportada",cost:"No adoptar COSTO X PIE: fórmula divide por metros y tarifa Q2 tiene etiqueta ambigua"},"SUPUESTO",null,"GoldTech Performance 2022.xlsx / coronas A1:N1; H3, J3, N3; gráficos 9 y 11","Se reutiliza estructura, no los registros históricos ni sus tarifas",null,"Coronas");
+ return {id:"REVISION_RAUL_2026_10_V1",revision:"RAUL_V2_2026_10_20",raulMse,reviewDepthComplements,catalog:cloned,manifest,defaultContext,candidates,advisorContext,depthSeries,surveys,mse,dashboardCrownReferenceM,syntheticTariff:100,consumptionEntries,analyticsRadar,benchmark,mechanicalByContext,dashboardCrownByContext};
 }
