@@ -38,7 +38,7 @@ export function RecoveredDepth({data}:CrownViewProps){
  const flowUnit=flowUnits.includes(requestedFlowUnit)?requestedFlowUnit:complements.find(s=>s.flow.classification!=="SINTETICO")?.flow.unit??flowUnits[0]??"L/min";
  const displayedUnits={...units,flow:`${flowUnit} · sin conversión`};
  const active=tracks.filter(t=>visible[t]);
- const option={animation:false,backgroundColor:"transparent",title:active.map((t,i)=>({text:labels[t],subtext:displayedUnits[t],left:`${5+i*90/active.length}%`,top:4,textStyle:{fontSize:12,color:"#eef3f5"},subtextStyle:{fontSize:8,color:"#91a0a8"}})),
+ const option={animation:false,backgroundColor:"transparent",title:active.map((t,i)=>({text:t==="flow"?"Caudal":labels[t],subtext:displayedUnits[t],left:`${5+i*90/active.length}%`,top:4,textStyle:{fontSize:12,color:"#eef3f5"},subtextStyle:{fontSize:8,color:"#91a0a8"}})),
   tooltip:{trigger:"item",backgroundColor:"#11191e",borderColor:"#344149",textStyle:{color:"#eef3f5"}},axisPointer:{link:[{yAxisIndex:"all"}]},
   grid:active.map((_,i)=>({left:`${5+i*90/active.length}%`,width:`${Math.max(4,84/active.length)}%`,top:62,bottom:30})),
   xAxis:active.map((_,i)=>({type:"value",gridIndex:i,position:"top",splitNumber:2,axisLabel:{color:"#91a0a8",fontSize:8,hideOverlap:true},axisLine:{lineStyle:{color:"#344149"}},splitLine:{lineStyle:{color:"#202a30"}}})),
